@@ -1,0 +1,52 @@
+name: isyarat_translator
+description: "Sistem Intelijen Visual Penerjemah Bahasa Isyarat Real-Time — Kelompok 2 PCD 2025/2026"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI & Navigation
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  go_router: ^14.8.1
+
+  # Camera
+  camera: ^0.10.5
+
+  # TFLite Inference
+  tflite_flutter: ^0.11.0
+
+  # Text to Speech
+  flutter_tts: ^4.2.5
+
+  # Vibration / Haptic
+  vibration: ^2.0.1
+
+  # Local Database (inheritance dari Proyek 4)
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+
+  # Utilities
+  intl: ^0.20.2
+  uuid: ^4.5.1
+  path_provider: ^2.1.5
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/
+    - assets/images/
