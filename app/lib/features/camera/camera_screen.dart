@@ -8,6 +8,7 @@ import 'package:camera/camera.dart';
 
 import '../../core/models/inference_result.dart';
 import '../../core/services/pcd_pipeline.dart';
+import '../../core/services/pcd_frame_processor.dart';
 import '../../core/services/tts_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/journal_repository.dart';
@@ -24,6 +25,7 @@ class _CameraScreenState extends State<CameraScreen>
   // ── Services ───────────────────────────────────────────────────────
   final _tts = TtsService();
   final _repo = JournalRepository();
+  final _pcdProcessor = const PcdFrameProcessor();
 
   // ── State ──────────────────────────────────────────────────────────
   InferenceResult _result = InferenceResult.empty;
@@ -35,6 +37,7 @@ class _CameraScreenState extends State<CameraScreen>
   bool _isTtsEnabled = true;
   bool _isProcessing = false;
   String? _lastSpokenText;
+  bool _isSwitchingCamera = false;
 
   // ── Hand Detection State ───────────────────────────────────────────
   bool _bothHandsDetected = false;
@@ -51,7 +54,13 @@ class _CameraScreenState extends State<CameraScreen>
   int _lastFrameMs = 0;
   int _lastLabelMs = 0;
   String _stableLabel = '';
-  static const int _frameIntervalMs = 250;
+  static const int _frameIntervalMs = 50;
+
+  // ── Performance stats ─────────────────────────────────────────────
+  int _frameCounter = 0;
+  int _lastFpsTickMs = 0;
+  double _lastFps = 0;
+  int _lastProcessMs = 0;
 
   @override
   void initState() {
@@ -76,6 +85,9 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _setCamera(CameraLensDirection dir) async {
     if (_cameras.isEmpty) return;
+    if (_isSwitchingCamera) return;
+    _isSwitchingCamera = true;
+    setState(() => _isCameraReady = false);
 
     CameraDescription? target;
     try {
@@ -85,21 +97,6 @@ class _CameraScreenState extends State<CameraScreen>
     }
 
     final oldCtrl = _cameraCtrl;
-    _cameraCtrl = CameraController(
-      target,
-      ResolutionPreset.medium,
-      enableAudio: false,
-    );
-
-    try {
-      await _cameraCtrl!.initialize();
-      if (!mounted) return;
-      setState(() => _isCameraReady = true);
-      await _startImageStream();
-    } catch (e) {
-      debugPrint('Camera set error: $e');
-    }
-
     if (oldCtrl != null) {
       try {
         if (oldCtrl.value.isStreamingImages) {
@@ -107,6 +104,37 @@ class _CameraScreenState extends State<CameraScreen>
         }
       } catch (_) {}
       await oldCtrl.dispose();
+    }
+
+    _isStreaming = false;
+    _isProcessing = false;
+    _lastFrameMs = 0;
+
+    final newCtrl = CameraController(
+      target,
+      ResolutionPreset.medium,
+      enableAudio: false,
+    );
+
+    try {
+      await newCtrl.initialize();
+      if (!mounted) {
+        await newCtrl.dispose();
+        return;
+      }
+      setState(() {
+        _cameraCtrl = newCtrl;
+        _isCameraReady = true;
+      });
+      await newCtrl.startImageStream(_onCameraImage);
+      _isStreaming = true;
+    } catch (e) {
+      debugPrint('Camera set error: $e');
+      try {
+        await newCtrl.dispose();
+      } catch (_) {}
+    } finally {
+      _isSwitchingCamera = false;
     }
   }
 
@@ -144,33 +172,54 @@ class _CameraScreenState extends State<CameraScreen>
     if (_isProcessing || !mounted) return;
     _isProcessing = true;
 
-    final bytes = _combinePlanes(image.planes);
-    final payload = IsolatePayload(
-      bytes: bytes,
-      width: image.width,
-      height: image.height,
-      isFrontCamera: _isFrontCamera,
-    );
+    final sw = Stopwatch()..start();
+    try {
+      final payload = IsolatePayload(
+        planes: _buildPlaneData(image.planes),
+        width: image.width,
+        height: image.height,
+        formatGroup: image.format.group.name,
+        isFrontCamera: _isFrontCamera,
+      );
 
-    // Jalankan PCD + Inference di background isolate via compute()
-    final result = await compute(runPcdPipeline, payload);
+      // Jalankan PCD + Inference di background isolate via compute()
+      final result = await _pcdProcessor.processFrame(payload);
+      sw.stop();
+      _lastProcessMs = sw.elapsedMilliseconds;
 
-    if (!mounted) {
+      if (!mounted) return;
+
+      setState(() => _result = result);
+
+      // Cek deteksi 2 tangan
+      _checkHandsDetection(result);
+
+      // Hanya proses gesture jika 2 tangan sudah terdeteksi
+      if (_bothHandsDetected) {
+        _maybeUpdateTranslation(result);
+      }
+    } catch (e) {
+      debugPrint('PCD process error: $e');
+    } finally {
       _isProcessing = false;
-      return;
+      _trackFps();
     }
+  }
 
-    setState(() => _result = result);
-
-    // Cek deteksi 2 tangan
-    _checkHandsDetection(result);
-
-    // Hanya proses gesture jika 2 tangan sudah terdeteksi
-    if (_bothHandsDetected) {
-      _maybeUpdateTranslation(result);
+  void _trackFps() {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_lastFpsTickMs == 0) _lastFpsTickMs = nowMs;
+    _frameCounter++;
+    final elapsed = nowMs - _lastFpsTickMs;
+    if (elapsed >= 1000) {
+      _lastFps = _frameCounter * 1000 / elapsed;
+      _frameCounter = 0;
+      _lastFpsTickMs = nowMs;
+      debugPrint(
+        'PCD perf | fps=${_lastFps.toStringAsFixed(1)} '
+        '| ms=${_lastProcessMs}',
+      );
     }
-
-    _isProcessing = false;
   }
 
   void _checkHandsDetection(InferenceResult result) {
@@ -204,15 +253,18 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  Uint8List _combinePlanes(List<Plane> planes) {
-    final total = planes.fold<int>(0, (sum, p) => sum + p.bytes.length);
-    final combined = Uint8List(total);
-    var offset = 0;
-    for (final plane in planes) {
-      combined.setRange(offset, offset + plane.bytes.length, plane.bytes);
-      offset += plane.bytes.length;
-    }
-    return combined;
+  List<PlaneData> _buildPlaneData(List<Plane> planes) {
+    return planes
+        .map(
+          (p) => PlaneData(
+            bytes: Uint8List.fromList(p.bytes),
+            bytesPerRow: p.bytesPerRow,
+            bytesPerPixel: p.bytesPerPixel ?? 1,
+            width: p.width ?? 0,
+            height: p.height ?? 0,
+          ),
+        )
+        .toList(growable: false);
   }
 
   void _maybeUpdateTranslation(InferenceResult result) {
@@ -252,9 +304,9 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  void _toggleCamera() {
+  Future<void> _toggleCamera() async {
     setState(() => _isFrontCamera = !_isFrontCamera);
-    _setCamera(
+    await _setCamera(
       _isFrontCamera ? CameraLensDirection.front : CameraLensDirection.back,
     );
     HapticFeedback.lightImpact();
@@ -346,6 +398,28 @@ class _CameraScreenState extends State<CameraScreen>
                         ),
                       ),
                   ],
+                ),
+              ),
+            ),
+
+          // ── Perf overlay (FPS + latency) ───────────────────────────
+          if (_isCameraReady)
+            Positioned(
+              top: 72,
+              left: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.divider),
+                ),
+                child: Text(
+                  'FPS ${_lastFps.toStringAsFixed(1)} | ${_lastProcessMs}ms',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textHint),
                 ),
               ),
             ),

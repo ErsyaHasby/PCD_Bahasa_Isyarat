@@ -30,15 +30,34 @@ class InferenceResult {
 
 /// Data yang dikirim ke Background Isolate
 class IsolatePayload {
-  final Uint8List bytes;
+  final List<PlaneData> planes;
   final int width;
   final int height;
+  final String formatGroup;
   final bool isFrontCamera;
 
   const IsolatePayload({
-    required this.bytes,
+    required this.planes,
     required this.width,
     required this.height,
+    required this.formatGroup,
     required this.isFrontCamera,
+  });
+}
+
+/// Plane metadata + bytes untuk CameraImage (aman dikirim ke isolate)
+class PlaneData {
+  final Uint8List bytes;
+  final int bytesPerRow;
+  final int bytesPerPixel;
+  final int width;
+  final int height;
+
+  const PlaneData({
+    required this.bytes,
+    required this.bytesPerRow,
+    required this.bytesPerPixel,
+    required this.width,
+    required this.height,
   });
 }
