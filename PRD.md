@@ -179,6 +179,107 @@ GAYA KODE: Modular, tidak ada mock untuk fitur inti, update doc jika relevan.
 - Brata: training sklearn + model export + inference
 - Varian: UI + history + integrasi hasil
 
+### 12.1 Rencana Eksekusi per Orang (Detail)
+
+#### Orang 1 - Ersya (Camera + PCD + Performance)
+
+Tujuan: frame kamera stabil, preprocessing cepat, latency rendah.
+
+Langkah:
+
+1. Setup kamera real-time di Flutter (stream frame).
+2. Konversi warna YUV/BGRA -> RGB.
+3. Center crop ke 1:1 dan resize ke ukuran input.
+4. Normalisasi pixel (0-1).
+5. Background isolate untuk pipeline supaya UI tetap responsif.
+6. Benchmark latency (target total preprocessing < 50 ms).
+7. Expose fungsi `processFrame()` untuk dipakai modul inference.
+
+Deliverable: pipeline PCD real-time stabil + latency rendah.
+
+#### Orang 2 - Alex (MediaPipe Hands + Feature Extraction)
+
+Tujuan: landmark tangan akurat + fitur siap untuk classifier.
+
+Langkah:
+
+1. Integrasi MediaPipe Hands di Flutter (plugin/native).
+2. Ambil 21 landmark per tangan per frame.
+3. Normalisasi landmark (posisi relatif, skala tangan).
+4. Buat fitur statis: jarak antar titik, sudut jari, rasio panjang.
+5. Tambah smoothing (moving average 3-5 frame).
+6. Siapkan output format fitur yang konsisten untuk training & inference.
+7. Uji stabilitas landmark di pencahayaan berbeda.
+
+Deliverable: landmark + fitur siap klasifikasi.
+
+#### Orang 3 - Brata (Sklearn Training + Model Export)
+
+Tujuan: classifier A-Z dengan akurasi baik dan inference ringan.
+
+Langkah:
+
+1. Tentukan label A-Z dan standar gesture.
+2. Kumpulkan data: minimal 50 sampel per kelas (target 200+).
+3. Extract fitur (harus sama dengan Orang 2).
+4. Latih model SVM/RandomForest/KNN.
+5. Evaluasi: confusion matrix + akurasi per kelas.
+6. Export model ke format yang bisa dipakai mobile (JSON/ONNX/TFLite).
+7. Buat inference wrapper di Flutter (fitur -> prediksi label).
+
+Deliverable: model classifier A-Z + inference siap dipakai.
+
+#### Orang 4 - Varian (UI/UX + Integrasi + History)
+
+Tujuan: hasil terjemahan jelas, cepat, dan tercatat.
+
+Langkah:
+
+1. Buat Camera Screen dengan overlay skeleton.
+2. Tampilkan hasil prediksi + confidence bar.
+3. Tambah TTS untuk output suara (opsional di MVP).
+4. Implement History Log dengan Hive (A-Z + timestamp).
+5. Tampilkan daftar history + filter sederhana.
+6. Latency feedback: tampilkan hasil < 300 ms.
+7. Rapikan flow UI: Splash -> Home -> Camera -> History.
+
+Deliverable: UI lengkap + output real-time + history.
+
+### 12.2 Sinkronisasi Lintas Tim (Wajib)
+
+- Format fitur harus disepakati Alex <-> Brata.
+- Input size harus cocok Ersya <-> Alex <-> Brata.
+- Output prediksi harus kompatibel Varian <-> Brata.
+
+### 12.3 Timeline Realistis (4 Minggu)
+
+Minggu 1:
+
+- Kamera + PCD jalan (Ersya).
+- MediaPipe landmark jalan (Alex).
+- Dataset mulai dikumpulkan (Brata).
+- UI camera dasar (Varian).
+
+Minggu 2:
+
+- Fitur landmark final (Alex).
+- Training model awal A-Z (Brata).
+- Integrasi inference di app (Brata + Varian).
+- Benchmark latency (Ersya).
+
+Minggu 3:
+
+- Model stabil + akurasi uji (Brata).
+- UI confidence + history (Varian).
+- Optimasi pipeline (Ersya).
+- Smoothing & stabilisasi landmark (Alex).
+
+Minggu 4:
+
+- Integrasi penuh.
+- Uji end-to-end (latency < 300 ms).
+- Demo dan dokumentasi.
+
 ## 13. Target Performa dan Kualitas
 
 ### 13.1 Performa
