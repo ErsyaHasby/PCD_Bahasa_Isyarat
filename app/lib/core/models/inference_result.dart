@@ -1,5 +1,5 @@
+import 'dart:typed_data' show Uint8List;
 import 'dart:ui' show Offset;
-import 'package:flutter/foundation.dart';
 
 /// Hasil output dari Background Isolate setelah PCD + Inference
 class InferenceResult {

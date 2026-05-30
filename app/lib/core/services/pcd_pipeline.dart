@@ -43,8 +43,9 @@ Float32List _preprocessFromPlanes(IsolatePayload payload) {
   final startX = (width - cropSize) ~/ 2;
   final startY = (height - cropSize) ~/ 2;
 
-  // Langkah 3: Resize ke 224x224 (input size model)
-  const modelSize = 224;
+  // Langkah 3: Resize ke input model (sementara diperkecil untuk FPS)
+  // TODO: Samakan dengan ukuran input model final.
+  const modelSize = 128;
 
   // Langkah 4: Normalisasi [0,255] → [0.0, 1.0] Float32
   final result = Float32List(modelSize * modelSize * 3);

@@ -25,7 +25,7 @@ class _CameraScreenState extends State<CameraScreen>
   // ── Services ───────────────────────────────────────────────────────
   final _tts = TtsService();
   final _repo = JournalRepository();
-  final _pcdProcessor = const PcdFrameProcessor();
+  final _pcdProcessor = PcdFrameProcessor();
 
   // ── State ──────────────────────────────────────────────────────────
   InferenceResult _result = InferenceResult.empty;
@@ -53,13 +53,18 @@ class _CameraScreenState extends State<CameraScreen>
   bool _isStreaming = false;
   int _lastFrameMs = 0;
   int _lastLabelMs = 0;
+  int _lastUiUpdateMs = 0;
+  int _frameSkip = 1;
+  int _frameIndex = 0;
   String _stableLabel = '';
-  static const int _frameIntervalMs = 50;
+  int _frameIntervalMs = 50;
+  bool _showOverlay = true;
 
   // ── Performance stats ─────────────────────────────────────────────
   int _frameCounter = 0;
   int _lastFpsTickMs = 0;
   double _lastFps = 0;
+  double _smoothedFps = 0;
   int _lastProcessMs = 0;
 
   @override
@@ -112,8 +117,9 @@ class _CameraScreenState extends State<CameraScreen>
 
     final newCtrl = CameraController(
       target,
-      ResolutionPreset.medium,
+      ResolutionPreset.high,
       enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.yuv420,
     );
 
     try {
@@ -165,6 +171,8 @@ class _CameraScreenState extends State<CameraScreen>
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (nowMs - _lastFrameMs < _frameIntervalMs) return;
     _lastFrameMs = nowMs;
+    _frameIndex++;
+    if (_frameIndex % _frameSkip != 0) return;
     _processFrame(image);
   }
 
@@ -189,14 +197,18 @@ class _CameraScreenState extends State<CameraScreen>
 
       if (!mounted) return;
 
-      setState(() => _result = result);
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (nowMs - _lastUiUpdateMs >= 100) {
+        _lastUiUpdateMs = nowMs;
+        setState(() => _result = result);
 
-      // Cek deteksi 2 tangan
-      _checkHandsDetection(result);
+        // Cek deteksi 2 tangan
+        _checkHandsDetection(result);
 
-      // Hanya proses gesture jika 2 tangan sudah terdeteksi
-      if (_bothHandsDetected) {
-        _maybeUpdateTranslation(result);
+        // Hanya proses gesture jika 2 tangan sudah terdeteksi
+        if (_bothHandsDetected) {
+          _maybeUpdateTranslation(result);
+        }
       }
     } catch (e) {
       debugPrint('PCD process error: $e');
@@ -213,12 +225,27 @@ class _CameraScreenState extends State<CameraScreen>
     final elapsed = nowMs - _lastFpsTickMs;
     if (elapsed >= 1000) {
       _lastFps = _frameCounter * 1000 / elapsed;
+      _smoothedFps = _smoothedFps == 0
+          ? _lastFps
+          : (_smoothedFps * 0.8) + (_lastFps * 0.2);
       _frameCounter = 0;
       _lastFpsTickMs = nowMs;
       debugPrint(
         'PCD perf | fps=${_lastFps.toStringAsFixed(1)} '
         '| ms=${_lastProcessMs}',
       );
+    }
+
+    // Adapt processing interval based on workload
+    if (_lastProcessMs > 60) {
+      _frameIntervalMs = 80;
+      _frameSkip = 3;
+    } else if (_lastProcessMs > 45) {
+      _frameIntervalMs = 60;
+      _frameSkip = 2;
+    } else if (_lastProcessMs < 35) {
+      _frameIntervalMs = 50;
+      _frameSkip = 1;
     }
   }
 
@@ -326,6 +353,7 @@ class _CameraScreenState extends State<CameraScreen>
       }
     } catch (_) {}
     _cameraCtrl?.dispose();
+    _pcdProcessor.dispose();
     _textCtrl.dispose();
     _tts.dispose();
     super.dispose();
@@ -357,7 +385,7 @@ class _CameraScreenState extends State<CameraScreen>
             _buildCameraBackground(),
 
           // ── Hand skeleton overlay ───────────────────────────────────
-          if (_isCameraReady)
+          if (_isCameraReady && _showOverlay)
             CustomPaint(
               painter: HandOverlayPainter(
                 result: _result,
@@ -418,7 +446,7 @@ class _CameraScreenState extends State<CameraScreen>
                   border: Border.all(color: AppTheme.divider),
                 ),
                 child: Text(
-                  'FPS ${_lastFps.toStringAsFixed(1)} | ${_lastProcessMs}ms',
+                  'FPS ${_smoothedFps.toStringAsFixed(1)} | ${_lastProcessMs}ms',
                   style: TextStyle(fontSize: 11, color: AppTheme.textHint),
                 ),
               ),
@@ -443,6 +471,16 @@ class _CameraScreenState extends State<CameraScreen>
                     _CircleButton(
                       icon: Icons.flip_camera_android_rounded,
                       onTap: _toggleCamera,
+                    ),
+                    const SizedBox(width: 8),
+                    _CircleButton(
+                      icon: _showOverlay
+                          ? Icons.visibility_rounded
+                          : Icons.visibility_off_rounded,
+                      onTap: () {
+                        setState(() => _showOverlay = !_showOverlay);
+                        HapticFeedback.lightImpact();
+                      },
                     ),
                   ],
                 ),
