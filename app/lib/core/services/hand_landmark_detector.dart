@@ -1,18 +1,20 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
-import 'package:hand_detection/hand_detection.dart';
+import 'package:hand_landmarker/hand_landmarker.dart';
 import '../models/hand_data.dart';
 
 class HandLandmarkDetector {
-  HandDetector? _detector;
+  HandLandmarkerPlugin? _plugin;
   bool _initialized = false;
+  bool _isDetecting = false;
 
   Future<void> initialize() async {
     if (_initialized) return;
     try {
-      _detector = await HandDetector.create(
-        mode: HandMode.boxesAndLandmarks,
-        maxDetections: 2,
+      _plugin = HandLandmarkerPlugin.create(
+        numHands: 2,
+        minHandDetectionConfidence: 0.7,
+        delegate: HandLandmarkerDelegate.cpu,
       );
       _initialized = true;
       debugPrint('HandLandmarkDetector initialized');
@@ -25,49 +27,66 @@ class HandLandmarkDetector {
     CameraImage image,
     CameraDescription camera,
   ) async {
-    if (_detector == null) return [];
+    if (_plugin == null || _isDetecting) return [];
+    _isDetecting = true;
 
     try {
-      final hands = await _detector!.detectFromCameraImage(
-        image,
-        rotation: _rotation(camera),
-        maxDim: 640,
-      );
+      // Validate image dimensions
+      if (image.width == 0 || image.height == 0) {
+        debugPrint('Warning: Invalid image dimensions: ${image.width}x${image.height}');
+        return [];
+      }
 
-      return hands.map((hand) => _extractHandData(hand)).toList();
-    } catch (e) {
-      debugPrint('HandLandmarkDetector process error: $e');
+      final hands = _plugin!.detect(image, camera.sensorOrientation);
+
+      // Debug: log sensor orientation & hand count
+      debugPrint('HandDetect: sensorOrientation=${camera.sensorOrientation} hands=${hands.length}');
+
+      return hands.map(_extractHandData).toList();
+    } catch (e, stack) {
+      debugPrint('HandLandmarkDetector process error: $e\n$stack');
       return [];
+    } finally {
+      _isDetecting = false;
     }
   }
 
-  CameraFrameRotation? _rotation(CameraDescription camera) {
-    if (defaultTargetPlatform == TargetPlatform.iOS) return null;
-    // Android: sensorOrientation 90 = back cam, 270 = front cam
-    if (camera.sensorOrientation == 90) return CameraFrameRotation.cw270;
-    if (camera.sensorOrientation == 270) return CameraFrameRotation.cw90;
-    return null;
-  }
-
   HandData _extractHandData(Hand hand) {
-    final count = hand.landmarks.length;
-    final landmarks = List<LandmarkPoint>.generate(
-      HandData.landmarkCount,
-      (i) {
-        if (i >= count) return LandmarkPoint.zero;
-        final lm = hand.landmarks[i];
-        return LandmarkPoint(
-          x: lm.xNorm(hand.imageWidth),
-          y: lm.yNorm(hand.imageHeight),
-          z: lm.z,
+    try {
+      final landmarks = hand.landmarks.map((lm) => LandmarkPoint(
+        x: lm.x,
+        y: lm.y,
+        z: lm.z,
+      )).toList();
+
+      // Validate landmark count (should be 21 for MediaPipe Hands)
+      if (landmarks.isEmpty) {
+        debugPrint('Warning: Empty landmarks detected');
+        return HandData.empty;
+      }
+
+      if (landmarks.length != HandData.landmarkCount) {
+        debugPrint('Warning: Expected ${HandData.landmarkCount} landmarks, got ${landmarks.length}');
+        // Pad or truncate to 21 landmarks
+        final padded = List<LandmarkPoint>.filled(
+          HandData.landmarkCount,
+          LandmarkPoint.zero,
         );
-      },
-    );
-    return HandData(landmarks: landmarks, isDetected: true);
+        for (int i = 0; i < landmarks.length && i < HandData.landmarkCount; i++) {
+          padded[i] = landmarks[i];
+        }
+        return HandData(landmarks: padded, isDetected: true);
+      }
+
+      return HandData(landmarks: landmarks, isDetected: true);
+    } catch (e) {
+      debugPrint('Error extracting hand data: $e');
+      return HandData.empty;
+    }
   }
 
   void dispose() {
-    _detector?.dispose();
+    _plugin?.dispose();
     _initialized = false;
   }
 }

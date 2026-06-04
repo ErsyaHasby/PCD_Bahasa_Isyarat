@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -110,10 +112,14 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       await _cameraCtrl!.initialize();
       if (!mounted) return;
+      debugPrint('Camera initialized successfully');
+      debugPrint('Camera previewSize: ${_cameraCtrl!.value.previewSize}');
+      debugPrint('Camera isInitialized: ${_cameraCtrl!.value.isInitialized}');
       setState(() => _isCameraReady = true);
       await _startImageStream();
     } catch (e) {
       debugPrint('Camera set error: $e');
+      setState(() => _isCameraReady = false);
     }
 
     if (oldCtrl != null) {
@@ -299,15 +305,8 @@ class _CameraScreenState extends State<CameraScreen>
         fit: StackFit.expand,
         children: [
           if (_cameraCtrl != null && _cameraCtrl!.value.isInitialized)
-            SizedBox.expand(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _cameraCtrl!.value.previewSize?.height ?? 1,
-                  height: _cameraCtrl!.value.previewSize?.width ?? 1,
-                  child: CameraPreview(_cameraCtrl!),
-                ),
-              ),
+            Positioned.fill(
+              child: CameraPreview(_cameraCtrl!),
             )
           else
             _buildCameraBackground(),

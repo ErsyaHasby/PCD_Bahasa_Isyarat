@@ -128,6 +128,10 @@ class HandFeatureExtractor {
   }
 
   List<double> _fingerDistances(List<LandmarkPoint> lm) {
+    if (lm.length < 21) {
+      return List<double>.filled(7, 0.0);
+    }
+
     final fingertipIndices = [4, 8, 12, 16, 20];
     // wrist (0) to each fingertip
     final distances = fingertipIndices.map((i) => _dist(lm[0], lm[i]));
@@ -139,6 +143,10 @@ class HandFeatureExtractor {
   }
 
   List<double> _fingerAngles(List<LandmarkPoint> lm) {
+    if (lm.length < 21) {
+      return List<double>.filled(7, 0.0);
+    }
+
     final angles = <double>[];
     // Finger curl angle (MCP-PIP-DIP angle) for index, middle, ring, pinky
     final fingerJoints = [
@@ -159,6 +167,10 @@ class HandFeatureExtractor {
   }
 
   List<double> _fingerRatios(List<LandmarkPoint> lm) {
+    if (lm.length < 21) {
+      return [0.0, 0.0, 0.0, 0.0];
+    }
+
     final fingerLengths = [
       _dist(lm[5], lm[8]),  // index
       _dist(lm[9], lm[12]), // middle

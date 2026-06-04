@@ -7,7 +7,7 @@ import '../models/inference_result.dart';
 /// Alur: CameraImage - HandDetector - Normalisasi - Smoothing - Fitur - Classifier
 ///
 /// Implementasi runtime ada di:
-///   - HandLandmarkDetector (MediaPipe via hand_detection)
+///   - HandLandmarkDetector (MediaPipe via hand_landmarker)
 ///   - HandFeatureExtractor (normalisasi, smoothing, fitur)
 ///   - HandClassifier (inference placeholder, diganti Brata)
 
