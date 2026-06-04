@@ -1,34 +1,41 @@
 import 'dart:ui' show Offset;
 import 'package:flutter/foundation.dart';
+import 'hand_data.dart';
 
-/// Hasil output dari Background Isolate setelah PCD + Inference
 class InferenceResult {
-  final String label; // Label gestur (contoh: "Halo", "A", "Terima Kasih")
-  final double confidence; // Skor kepercayaan 0.0 - 1.0
-  final List<Offset>
-  landmarks; // 21 koordinat tangan (sudah dinormalisasi 0.0-1.0)
-  final int handsDetected; // Jumlah tangan terdeteksi (0, 1, atau 2)
+  final String label;
+  final double confidence;
+  final HandData hand1;
+  final HandData hand2;
+  final int handsDetected;
 
   const InferenceResult({
     required this.label,
     required this.confidence,
-    required this.landmarks,
+    required this.hand1,
+    required this.hand2,
     required this.handsDetected,
   });
 
   static const InferenceResult empty = InferenceResult(
     label: '',
     confidence: 0.0,
-    landmarks: [],
+    hand1: HandData.empty,
+    hand2: HandData.empty,
     handsDetected: 0,
   );
 
   bool get isConfident => confidence >= 0.75;
   bool get handDetected => handsDetected > 0;
   bool get bothHandsDetected => handsDetected >= 2;
+
+  List<LandmarkPoint> get allLandmarks =>
+      [...hand1.landmarks, ...hand2.landmarks];
+
+  List<Offset> get landmarkOffsets =>
+      allLandmarks.map((lm) => Offset(lm.x, lm.y)).toList();
 }
 
-/// Data yang dikirim ke Background Isolate
 class IsolatePayload {
   final Uint8List bytes;
   final int width;

@@ -18,6 +18,9 @@ dependencies:
   # Camera
   camera: ^0.10.5
 
+  # MediaPipe Hand Landmark Detection (TFLite-based, cross-platform)
+  hand_detection: ^3.1.0
+
   # TFLite Inference
   tflite_flutter: ^0.11.0
 
