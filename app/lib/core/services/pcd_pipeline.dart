@@ -4,7 +4,8 @@ import '../models/inference_result.dart';
 
 /// ═══════════════════════════════════════════════════════════════════
 ///  PCD Pipeline — Berjalan di Background Isolate
-///  Alur: YUV/BGRA → RGB → Center Crop → Resize → Normalisasi → Done
+///  Alur: YUV/BGRA → RGB → Center Crop → Resize → Normalisasi → Mock Inference
+///  CATATAN: Mock inference sementara, akan diganti ONNX setelah MediaPipe siap
 /// ═══════════════════════════════════════════════════════════════════
 
 /// Entry point untuk compute() — dipanggil dari CameraNotifier
@@ -12,10 +13,9 @@ Future<InferenceResult> runPcdPipeline(IsolatePayload payload) async {
   // ── Step 1: Decode raw bytes jadi pixel array ──────────────────────
   final preprocessed = _preprocessFromPlanes(payload);
 
-  // ── Step 2: TFLite Inference ───────────────────────────────────────
-  // CATATAN: Implementasi nyata memerlukan tflite_flutter & model .tflite
-  // final interpreter = Interpreter.fromAsset('assets/models/gesture.tflite');
-  // interpreter.run(preprocessed, outputBuffer);
+  // ── Step 2: Mock Inference (sementara, akan diganti ONNX + MediaPipe) ──
+  // CATATAN: Gunakan labels A-Z sesuai model yang sudah dilatih
+  // TODO: Integrasikan dengan MediaPipe Hands + ONNX classifier
   final result = await _mockInference(preprocessed);
 
   // ── Step 3: Coordinate Mapping ─────────────────────────────────────
@@ -166,22 +166,22 @@ void _fillFromBgra8888({
   }
 }
 
-/// Mock inference — diganti dengan TFLite nyata saat model tersedia
+/// Mock inference — diganti dengan ONNX + MediaPipe saat siap
+/// CATATAN: Labels A-Z sesuai model yang sudah dilatih (90.35% accuracy)
 Future<InferenceResult> _mockInference(Float32List _) async {
   // Simulasi 21 landmark tangan dalam koordinat relatif (0.0 - 1.0)
-  // Posisi simulasi telapak tangan dan jari-jari
   final landmarks = _generateMockLandmarks();
 
-  // Pilih label secara sekuensial untuk demo
-  final labels = ['Halo', 'Terima Kasih', 'Maaf', 'Tolong', 'Ya', 'Tidak'];
+  // Labels A-Z sesuai model yang sudah dilatih
+  final labels = List.generate(26, (i) => String.fromCharCode(65 + i));
   final now = DateTime.now().millisecondsSinceEpoch;
-  final label = labels[(now ~/ 3000) % labels.length];
+  final label = labels[(now ~/ 2000) % labels.length];
 
   return InferenceResult(
     label: label,
     confidence: 0.85 + (now % 15) / 100,
     landmarks: landmarks,
-    handsDetected: 2, // Deteksi 2 tangan untuk demo
+    handsDetected: 2,
   );
 }
 

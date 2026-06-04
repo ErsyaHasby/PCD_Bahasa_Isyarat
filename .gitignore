@@ -73,3 +73,11 @@ npm-debug.log
 .env
 *.log
 coverage/
+
+# ML Model Artifacts (bisa di-generate ulang)
+experiments/feature_extraction/dataset_landmarks.csv
+experiments/feature_extraction/missing_hands_log.txt
+experiments/feature_extraction/models/
+
+# Flutter auto-generated
+app/linux/flutter/generated_plugins.cmake
