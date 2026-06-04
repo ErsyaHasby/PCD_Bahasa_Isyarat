@@ -182,10 +182,6 @@ class _CameraScreenState extends State<CameraScreen>
       final normalized = _extractor.normalize(handDataList);
       final smoothed = _extractor.smooth(normalized);
 
-      // Flattened features ready for classifier (Brata's model)
-      // ignore: unused_local_variable
-      final features = _extractor.flatten(smoothed);
-
       final hand1 = handDataList.isNotEmpty
           ? HandData(
               landmarks: smoothed[0], isDetected: handDataList[0].isDetected)
@@ -194,6 +190,9 @@ class _CameraScreenState extends State<CameraScreen>
           ? HandData(
               landmarks: smoothed[1], isDetected: handDataList[1].isDetected)
           : HandData.empty;
+
+      final featureSet = _extractor.extractAll(smoothed);
+      handsDetected = featureSet.handCount;
 
       final result = _classifier.classify(
         hand1: hand1,
