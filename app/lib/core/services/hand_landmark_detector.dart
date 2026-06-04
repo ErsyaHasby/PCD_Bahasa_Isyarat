@@ -42,7 +42,10 @@ class HandLandmarkDetector {
       // Debug: log sensor orientation & hand count
       debugPrint('HandDetect: sensorOrientation=${camera.sensorOrientation} hands=${hands.length}');
 
-      return hands.map(_extractHandData).toList();
+      // Pass sensorOrientation so extraction can account for image rotation
+      return hands
+          .map((hand) => _extractHandData(hand, image.width, image.height, camera.sensorOrientation))
+          .toList();
     } catch (e, stack) {
       debugPrint('HandLandmarkDetector process error: $e\n$stack');
       return [];
@@ -51,8 +54,15 @@ class HandLandmarkDetector {
     }
   }
 
-  HandData _extractHandData(Hand hand) {
+  HandData _extractHandData(Hand hand, int imageWidth, int imageHeight, int sensorOrientation) {
     try {
+      // MediaPipe landmark x,y values are already normalized to [0,1].
+      // No additional division by image dimensions is needed.
+      if (hand.landmarks.isNotEmpty) {
+        final raw0 = hand.landmarks[0];
+        debugPrint('RawMediaPipe: first=(${raw0.x.toStringAsFixed(2)}, ${raw0.y.toStringAsFixed(2)})');
+      }
+
       final landmarks = hand.landmarks.map((lm) => LandmarkPoint(
         x: lm.x,
         y: lm.y,

@@ -54,6 +54,9 @@ class _CameraScreenState extends State<CameraScreen>
   String _stableLabel = '';
   static const int _frameIntervalMs = 250;
 
+  final List<List<LandmarkPoint>> _rawBuffer = [[], []];
+  int _sensorOrientation = 0;
+
   @override
   void initState() {
     super.initState();
@@ -112,9 +115,12 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       await _cameraCtrl!.initialize();
       if (!mounted) return;
+      _sensorOrientation = target.sensorOrientation;
       debugPrint('Camera initialized successfully');
       debugPrint('Camera previewSize: ${_cameraCtrl!.value.previewSize}');
+      debugPrint('Camera sensorOrientation: ${target.sensorOrientation}');
       debugPrint('Camera isInitialized: ${_cameraCtrl!.value.isInitialized}');
+      debugPrint('Screen size: ${MediaQuery.of(context).size}');
       setState(() => _isCameraReady = true);
       await _startImageStream();
     } catch (e) {
@@ -185,16 +191,23 @@ class _CameraScreenState extends State<CameraScreen>
         return;
       }
 
+      // --- Feature pipeline (wrist-relative) for classifier ---
       final normalized = _extractor.normalize(handDataList);
       final smoothed = _extractor.smooth(normalized);
 
+      // --- Display pipeline (raw 0-1 image coords) for skeleton overlay ---
+      // Smooth raw landmarks so the overlay stays stable
+      final rawSmoothed = _smoothRawLandmarks(handDataList);
+
       final hand1 = handDataList.isNotEmpty
           ? HandData(
-              landmarks: smoothed[0], isDetected: handDataList[0].isDetected)
+              landmarks: rawSmoothed[0],
+              isDetected: handDataList[0].isDetected)
           : HandData.empty;
       final hand2 = handDataList.length >= 2
           ? HandData(
-              landmarks: smoothed[1], isDetected: handDataList[1].isDetected)
+              landmarks: rawSmoothed[1],
+              isDetected: handDataList[1].isDetected)
           : HandData.empty;
 
       final featureSet = _extractor.extractAll(smoothed);
@@ -217,6 +230,61 @@ class _CameraScreenState extends State<CameraScreen>
     }
 
     _isProcessing = false;
+  }
+
+  List<List<LandmarkPoint>> _smoothRawLandmarks(List<HandData> hands) {
+    const int window = 3;
+    final result = <List<LandmarkPoint>>[];
+
+    for (int h = 0; h < 2; h++) {
+      // Only buffer data when the hand is actually detected
+      if (h < hands.length && hands[h].isDetected) {
+        final firstLm = hands[h].landmarks[0];
+        debugPrint('SmoothBuffer: h=$h adding count=${hands[h].landmarks.length} first=(${firstLm.x.toStringAsFixed(3)}, ${firstLm.y.toStringAsFixed(3)})');
+        _rawBuffer[h].addAll(hands[h].landmarks);
+
+        // Trim buffer to window size
+        while (_rawBuffer[h].length > window * HandData.landmarkCount) {
+          _rawBuffer[h].removeRange(0, HandData.landmarkCount);
+        }
+      } else {
+        debugPrint('SmoothBuffer: h=$h NOT adding (hands.length=${hands.length}, isDetected=${h < hands.length ? hands[h].isDetected : "N/A"})');
+      }
+
+      // Average whatever is in the buffer (if anything)
+      final frameCount = _rawBuffer[h].length ~/ HandData.landmarkCount;
+      final bufLen = _rawBuffer[h].length;
+      if (_rawBuffer[h].isNotEmpty) {
+        final firstBuf = _rawBuffer[h][0];
+        debugPrint('SmoothBuffer: h=$h bufLen=$bufLen frameCount=$frameCount first=(${firstBuf.x.toStringAsFixed(3)}, ${firstBuf.y.toStringAsFixed(3)})');
+      }
+
+      if (frameCount == 0) {
+        result.add(List<LandmarkPoint>.filled(
+          HandData.landmarkCount,
+          LandmarkPoint.zero,
+        ));
+        continue;
+      }
+
+      final avg = List<LandmarkPoint>.generate(HandData.landmarkCount, (i) {
+        double sx = 0, sy = 0, sz = 0;
+        for (int f = 0; f < frameCount; f++) {
+          final idx = f * HandData.landmarkCount + i;
+          sx += _rawBuffer[h][idx].x;
+          sy += _rawBuffer[h][idx].y;
+          sz += _rawBuffer[h][idx].z;
+        }
+        return LandmarkPoint(
+          x: sx / frameCount,
+          y: sy / frameCount,
+          z: sz / frameCount,
+        );
+      });
+      result.add(avg);
+    }
+
+    return result;
   }
 
   void _checkHandsDetection(InferenceResult result) {
@@ -315,8 +383,10 @@ class _CameraScreenState extends State<CameraScreen>
             CustomPaint(
               painter: HandOverlayPainter(
                 result: _result,
-                previewSize: MediaQuery.of(context).size,
+                previewSize: _cameraCtrl!.value.previewSize ?? MediaQuery.of(context).size,
+                screenSize: MediaQuery.of(context).size,
                 isFrontCamera: _isFrontCamera,
+                sensorOrientation: _sensorOrientation,
               ),
             ),
 

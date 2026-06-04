@@ -6,12 +6,16 @@ import '../../core/theme/app_theme.dart';
 class HandOverlayPainter extends CustomPainter {
   final InferenceResult result;
   final Size previewSize;
+  final Size screenSize;
   final bool isFrontCamera;
+  final int sensorOrientation;
 
   HandOverlayPainter({
     required this.result,
     required this.previewSize,
+    required this.screenSize,
     this.isFrontCamera = true,
+    this.sensorOrientation = 0,
   });
 
   static const List<List<int>> _connections = [
@@ -35,24 +39,53 @@ class HandOverlayPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (!result.handDetected) return;
 
+    // CameraPreview rotates the image based on sensorOrientation, so the
+    // effective display aspect ratio may be swapped relative to previewSize.
+    final isRotated = (sensorOrientation % 180 == 90);
+    final dispW = isRotated ? previewSize.height : previewSize.width;
+    final dispH = isRotated ? previewSize.width : previewSize.height;
+    final cameraAspect = dispW / dispH;
+    final screenAspect = screenSize.width / screenSize.height;
+    
+    // Calculate actual displayed camera preview size (with aspect ratio preservation)
+    Size displayedSize;
+    Offset offset;
+    
+    if (screenAspect > cameraAspect) {
+      // Screen is wider than camera - height constrained, letterboxing on left/right
+      displayedSize = Size(size.height * cameraAspect, size.height);
+      offset = Offset((size.width - displayedSize.width) / 2, 0);
+    } else {
+      // Screen is taller than camera - width constrained, letterboxing on top/bottom
+      displayedSize = Size(size.width, size.width / cameraAspect);
+      offset = Offset(0, (size.height - displayedSize.height) / 2);
+    }
+    
+    debugPrint('OverlayPainter: screenSize=$screenSize, previewSize=$previewSize sensorOrientation=$sensorOrientation');
+    debugPrint('cameraAspect=$cameraAspect displayedSize=$displayedSize, offset=$offset');
+
     if (result.hand1.isDetected) {
-      _drawHand(canvas, size, result.hand1.landmarks, 0);
+      debugPrint('Hand1 landmarks: ${result.hand1.landmarks.map((lm) => '(${lm.x.toStringAsFixed(2)}, ${lm.y.toStringAsFixed(2)})').take(5).join(', ')}...');
+      _drawHand(canvas, displayedSize, offset, result.hand1.landmarks, 0);
     }
     if (result.hand2.isDetected) {
-      _drawHand(canvas, size, result.hand2.landmarks, 1);
+      _drawHand(canvas, displayedSize, offset, result.hand2.landmarks, 1);
     }
   }
 
   void _drawHand(
     Canvas canvas,
     Size size,
+    Offset offset,
     List<LandmarkPoint> landmarks,
     int handIndex,
   ) {
     final pts = landmarks.map((lm) {
-      var x = lm.x;
-      if (isFrontCamera) x = 1.0 - x;
-      return Offset(x * size.width, lm.y * size.height);
+      final x = lm.x;
+      final y = lm.y;
+
+      // Scale to displayed size and apply offset
+      return Offset(x * size.width + offset.dx, y * size.height + offset.dy);
     }).toList();
 
     for (final conn in _connections) {
@@ -134,5 +167,7 @@ class HandOverlayPainter extends CustomPainter {
   bool shouldRepaint(HandOverlayPainter old) =>
       old.result != result ||
       old.previewSize != previewSize ||
-      old.isFrontCamera != isFrontCamera;
+      old.screenSize != screenSize ||
+      old.isFrontCamera != isFrontCamera ||
+      old.sensorOrientation != sensorOrientation;
 }
