@@ -196,8 +196,18 @@ class _CameraScreenState extends State<CameraScreen>
       final smoothed = _extractor.smooth(normalized);
 
       // --- Display pipeline (raw 0-1 image coords) for skeleton overlay ---
-      // Smooth raw landmarks so the overlay stays stable
       final rawSmoothed = _smoothRawLandmarks(handDataList);
+
+      // Mirror horizontally for front camera (camera preview is mirrored)
+      if (_isFrontCamera) {
+        for (int h = 0; h < rawSmoothed.length; h++) {
+          rawSmoothed[h] = rawSmoothed[h].map((lm) => LandmarkPoint(
+            x: 1.0 - lm.x,
+            y: lm.y,
+            z: lm.z,
+          )).toList();
+        }
+      }
 
       final hand1 = handDataList.isNotEmpty
           ? HandData(
@@ -233,31 +243,19 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   List<List<LandmarkPoint>> _smoothRawLandmarks(List<HandData> hands) {
-    const int window = 3;
+    const int window = 1;
     final result = <List<LandmarkPoint>>[];
 
     for (int h = 0; h < 2; h++) {
-      // Only buffer data when the hand is actually detected
       if (h < hands.length && hands[h].isDetected) {
-        final firstLm = hands[h].landmarks[0];
-        debugPrint('SmoothBuffer: h=$h adding count=${hands[h].landmarks.length} first=(${firstLm.x.toStringAsFixed(3)}, ${firstLm.y.toStringAsFixed(3)})');
-        _rawBuffer[h].addAll(hands[h].landmarks);
-
-        // Trim buffer to window size
-        while (_rawBuffer[h].length > window * HandData.landmarkCount) {
-          _rawBuffer[h].removeRange(0, HandData.landmarkCount);
-        }
+        // Hand detected — replace buffer with just this frame
+        _rawBuffer[h] = List<LandmarkPoint>.from(hands[h].landmarks);
       } else {
-        debugPrint('SmoothBuffer: h=$h NOT adding (hands.length=${hands.length}, isDetected=${h < hands.length ? hands[h].isDetected : "N/A"})');
+        // Hand lost — clear buffer so stale data doesn't linger
+        _rawBuffer[h].clear();
       }
 
-      // Average whatever is in the buffer (if anything)
       final frameCount = _rawBuffer[h].length ~/ HandData.landmarkCount;
-      final bufLen = _rawBuffer[h].length;
-      if (_rawBuffer[h].isNotEmpty) {
-        final firstBuf = _rawBuffer[h][0];
-        debugPrint('SmoothBuffer: h=$h bufLen=$bufLen frameCount=$frameCount first=(${firstBuf.x.toStringAsFixed(3)}, ${firstBuf.y.toStringAsFixed(3)})');
-      }
 
       if (frameCount == 0) {
         result.add(List<LandmarkPoint>.filled(
@@ -267,21 +265,10 @@ class _CameraScreenState extends State<CameraScreen>
         continue;
       }
 
-      final avg = List<LandmarkPoint>.generate(HandData.landmarkCount, (i) {
-        double sx = 0, sy = 0, sz = 0;
-        for (int f = 0; f < frameCount; f++) {
-          final idx = f * HandData.landmarkCount + i;
-          sx += _rawBuffer[h][idx].x;
-          sy += _rawBuffer[h][idx].y;
-          sz += _rawBuffer[h][idx].z;
-        }
-        return LandmarkPoint(
-          x: sx / frameCount,
-          y: sy / frameCount,
-          z: sz / frameCount,
-        );
-      });
-      result.add(avg);
+      // Passthrough: single frame, no averaging lag for display overlay
+      result.add(List<LandmarkPoint>.from(
+        _rawBuffer[h].sublist(0, HandData.landmarkCount),
+      ));
     }
 
     return result;

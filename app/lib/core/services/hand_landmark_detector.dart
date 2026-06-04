@@ -56,18 +56,41 @@ class HandLandmarkDetector {
 
   HandData _extractHandData(Hand hand, int imageWidth, int imageHeight, int sensorOrientation) {
     try {
-      // MediaPipe landmark x,y values are already normalized to [0,1].
-      // No additional division by image dimensions is needed.
+      // MediaPipe outputs landmarks in the ORIGINAL (unrotated) image coordinate
+      // space. The hand_landmarker plugin passes sensorOrientation as
+      // setRotationDegrees for internal processing, but the returned x,y are
+      // still in sensor-native coordinates (e.g. 720×480 landscape).
+      // We must rotate them to display (portrait) space here.
       if (hand.landmarks.isNotEmpty) {
         final raw0 = hand.landmarks[0];
-        debugPrint('RawMediaPipe: first=(${raw0.x.toStringAsFixed(2)}, ${raw0.y.toStringAsFixed(2)})');
+        debugPrint('RawMediaPipe: first=(${raw0.x.toStringAsFixed(2)}, ${raw0.y.toStringAsFixed(2)}) dims=${imageWidth}x$imageHeight rot=$sensorOrientation');
       }
 
-      final landmarks = hand.landmarks.map((lm) => LandmarkPoint(
-        x: lm.x,
-        y: lm.y,
-        z: lm.z,
-      )).toList();
+      final landmarks = hand.landmarks.map((lm) {
+        double dx, dy;
+
+        // Rotate from sensor orientation to display orientation.
+        // sensorOrientation is the counter-clockwise rotation needed.
+        switch (sensorOrientation) {
+          case 0:
+            dx = lm.x;
+            dy = lm.y;
+          case 90:
+            dx = 1.0 - lm.y;
+            dy = lm.x;
+          case 180:
+            dx = 1.0 - lm.x;
+            dy = 1.0 - lm.y;
+          case 270:
+            dx = lm.y;
+            dy = 1.0 - lm.x;
+          default:
+            dx = lm.x;
+            dy = lm.y;
+        }
+
+        return LandmarkPoint(x: dx, y: dy, z: lm.z);
+      }).toList();
 
       // Validate landmark count (should be 21 for MediaPipe Hands)
       if (landmarks.isEmpty) {
