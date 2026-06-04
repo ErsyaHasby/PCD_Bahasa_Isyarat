@@ -3,9 +3,32 @@ import '../models/hand_data.dart';
 
 class HandClassifier {
   static const List<String> _labels = [
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-    'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-    'U', 'V', 'W', 'X', 'Y', 'Z',
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+    'I',
+    'J',
+    'K',
+    'L',
+    'M',
+    'N',
+    'O',
+    'P',
+    'Q',
+    'R',
+    'S',
+    'T',
+    'U',
+    'V',
+    'W',
+    'X',
+    'Y',
+    'Z',
   ];
 
   int _labelIndex = 0;
@@ -22,6 +45,10 @@ class HandClassifier {
       return InferenceResult.empty;
     }
 
+    // Placeholder: cycling A-Z tiap 2 detik
+    // TODO: Integrasikan ONNX model (gesture_model.onnx) untuk inference nyata
+    // Model sudah tersedia di app/assets/models/gesture_model.onnx
+    // Labels sudah tersedia di app/assets/models/labels.json
     if (now - _lastSwitchMs > 2000) {
       _labelIndex = (_labelIndex + 1) % _labels.length;
       _lastSwitchMs = now;
