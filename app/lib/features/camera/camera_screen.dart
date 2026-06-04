@@ -177,12 +177,12 @@ class _CameraScreenState extends State<CameraScreen>
     final handsCount = result.handsDetected;
 
     // Deteksi perubahan status
-    if (handsCount >= 2 && !_bothHandsDetected) {
+    if (handsCount >= 1 && !_bothHandsDetected) {
       setState(() => _bothHandsDetected = true);
       _handReadyNotified = false; // Reset flag
       // Trigger notifikasi
       _notifyHandsReady();
-    } else if (handsCount < 2 && _bothHandsDetected) {
+    } else if (handsCount < 1 && _bothHandsDetected) {
       setState(() {
         _bothHandsDetected = false;
         _translatedText = '';
@@ -313,7 +313,7 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
 
-          // ── Hand detection status (simple text only) ────────────────
+          // ── Hand detection status & Top buttons ───────────────────────
           if (_isCameraReady)
             Positioned(
               top: 16,
@@ -345,19 +345,28 @@ class _CameraScreenState extends State<CameraScreen>
                           ),
                         ),
                       ),
-                  ],
-                ),
-              ),
-            ),
-
-          // ── Top right buttons ────────────────────────────────────────
-          if (_isCameraReady)
-            Positioned(
-              top: 16,
-              right: 16,
-              child: SafeArea(
-                child: Row(
-                  children: [
+                    if (_bothHandsDetected)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '⏱ ${_result.latencyMs} ms',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _result.latencyMs < 300 
+                                ? AppTheme.success 
+                                : AppTheme.warning,
+                          ),
+                        ),
+                      ),
+                    const Spacer(),
                     _CircleButton(
                       icon: _isTtsEnabled
                           ? Icons.volume_up_rounded
@@ -399,7 +408,7 @@ class _CameraScreenState extends State<CameraScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Letakkan 2 tangan di depan kamera',
+                        'Letakkan tangan di depan kamera',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 14,
@@ -486,20 +495,28 @@ class _CameraScreenState extends State<CameraScreen>
                     fontStyle: FontStyle.italic,
                   ),
                 )
-              : SlideTransition(
-                  position: _textSlide,
-                  child: FadeTransition(
-                    opacity: _textFade,
-                    child: Text(
-                      _translatedText,
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: -0.5,
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SlideTransition(
+                      position: _textSlide,
+                      child: FadeTransition(
+                        opacity: _textFade,
+                        child: Text(
+                          _translatedText,
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    _ConfidenceBar(confidence: _result.confidence),
+                  ],
                 ),
         ),
       ),

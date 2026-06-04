@@ -8,12 +8,14 @@ class InferenceResult {
   final List<Offset>
   landmarks; // 21 koordinat tangan (sudah dinormalisasi 0.0-1.0)
   final int handsDetected; // Jumlah tangan terdeteksi (0, 1, atau 2)
+  final int latencyMs; // E2E Latency
 
   const InferenceResult({
     required this.label,
     required this.confidence,
     required this.landmarks,
     required this.handsDetected,
+    required this.latencyMs,
   });
 
   static const InferenceResult empty = InferenceResult(
@@ -21,6 +23,7 @@ class InferenceResult {
     confidence: 0.0,
     landmarks: [],
     handsDetected: 0,
+    latencyMs: 0,
   );
 
   bool get isConfident => confidence >= 0.75;

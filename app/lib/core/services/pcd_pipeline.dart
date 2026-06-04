@@ -9,6 +9,7 @@ import '../models/inference_result.dart';
 
 /// Entry point untuk compute() — dipanggil dari CameraNotifier
 Future<InferenceResult> runPcdPipeline(IsolatePayload payload) async {
+  final startTime = DateTime.now().millisecondsSinceEpoch;
   // ── Step 1: Decode raw bytes jadi pixel array ──────────────────────
   // (Dalam implementasi nyata, ini menerima CameraImage planes dari Flutter)
   // Di sini kita simulasikan dengan mock inference untuk demo UI
@@ -35,6 +36,7 @@ Future<InferenceResult> runPcdPipeline(IsolatePayload payload) async {
     confidence: result.confidence,
     landmarks: mappedLandmarks,
     handsDetected: result.handsDetected,
+    latencyMs: DateTime.now().millisecondsSinceEpoch - startTime,
   );
 }
 
@@ -88,6 +90,7 @@ Future<InferenceResult> _mockInference(Float32List _) async {
     confidence: 0.85 + (now % 15) / 100,
     landmarks: landmarks,
     handsDetected: 2, // Deteksi 2 tangan untuk demo
+    latencyMs: 0,
   );
 }
 
