@@ -8,6 +8,7 @@ import '../../core/models/inference_result.dart';
 import '../../core/models/hand_data.dart';
 import '../../core/services/hand_landmark_detector.dart';
 import '../../core/services/hand_classifier.dart';
+import '../../core/services/hand_feature_extractor.dart';
 import '../../core/services/tts_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/journal_repository.dart';
@@ -25,6 +26,7 @@ class _CameraScreenState extends State<CameraScreen>
   final _repo = JournalRepository();
   final _detector = HandLandmarkDetector();
   final _classifier = HandClassifier();
+  final _extractor = HandFeatureExtractor();
 
   InferenceResult _result = InferenceResult.empty;
   String _translatedText = '';
@@ -170,21 +172,28 @@ class _CameraScreenState extends State<CameraScreen>
 
       final handDataList = await _detector.processFrame(image, camera);
 
-      HandData hand1 = HandData.empty;
-      HandData hand2 = HandData.empty;
       int handsDetected = handDataList.length;
-
-      if (handDataList.isNotEmpty) {
-        hand1 = handDataList[0];
-      }
-      if (handDataList.length >= 2) {
-        hand2 = handDataList[1];
-      }
 
       if (!mounted) {
         _isProcessing = false;
         return;
       }
+
+      final normalized = _extractor.normalize(handDataList);
+      final smoothed = _extractor.smooth(normalized);
+
+      // Flattened features ready for classifier (Brata's model)
+      // ignore: unused_local_variable
+      final features = _extractor.flatten(smoothed);
+
+      final hand1 = handDataList.isNotEmpty
+          ? HandData(
+              landmarks: smoothed[0], isDetected: handDataList[0].isDetected)
+          : HandData.empty;
+      final hand2 = handDataList.length >= 2
+          ? HandData(
+              landmarks: smoothed[1], isDetected: handDataList[1].isDetected)
+          : HandData.empty;
 
       final result = _classifier.classify(
         hand1: hand1,
