@@ -243,32 +243,43 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   List<List<LandmarkPoint>> _smoothRawLandmarks(List<HandData> hands) {
-    const int window = 1;
+    // EMA alpha: higher = more responsive (less smoothing)
+    // 0.8 means 80% new + 20% previous — reduces jitter without noticeable lag
+    const double alpha = 0.8;
     final result = <List<LandmarkPoint>>[];
 
     for (int h = 0; h < 2; h++) {
       if (h < hands.length && hands[h].isDetected) {
-        // Hand detected — replace buffer with just this frame
-        _rawBuffer[h] = List<LandmarkPoint>.from(hands[h].landmarks);
+        final raw = hands[h].landmarks;
+
+        if (_rawBuffer[h].isEmpty) {
+          // First detection — initialise EMA with raw frame
+          _rawBuffer[h] = raw.map((lm) => LandmarkPoint(
+            x: lm.x, y: lm.y, z: lm.z,
+          )).toList();
+        } else {
+          // EMA update: blend current raw into stored EMA
+          for (int i = 0; i < HandData.landmarkCount && i < raw.length; i++) {
+            final prev = _rawBuffer[h][i];
+            final cur = raw[i];
+            _rawBuffer[h][i] = LandmarkPoint(
+              x: alpha * cur.x + (1 - alpha) * prev.x,
+              y: alpha * cur.y + (1 - alpha) * prev.y,
+              z: alpha * cur.z + (1 - alpha) * prev.z,
+            );
+          }
+        }
+
+        // Use EMA value for display
+        result.add(List<LandmarkPoint>.from(_rawBuffer[h]));
       } else {
-        // Hand lost — clear buffer so stale data doesn't linger
+        // Hand lost — clear buffer
         _rawBuffer[h].clear();
-      }
-
-      final frameCount = _rawBuffer[h].length ~/ HandData.landmarkCount;
-
-      if (frameCount == 0) {
         result.add(List<LandmarkPoint>.filled(
           HandData.landmarkCount,
           LandmarkPoint.zero,
         ));
-        continue;
       }
-
-      // Passthrough: single frame, no averaging lag for display overlay
-      result.add(List<LandmarkPoint>.from(
-        _rawBuffer[h].sublist(0, HandData.landmarkCount),
-      ));
     }
 
     return result;
