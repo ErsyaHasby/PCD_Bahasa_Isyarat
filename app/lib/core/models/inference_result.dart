@@ -8,6 +8,7 @@ class InferenceResult {
   final HandData hand1;
   final HandData hand2;
   final int handsDetected;
+  final int latencyMs;
 
   const InferenceResult({
     required this.label,
@@ -15,6 +16,7 @@ class InferenceResult {
     required this.hand1,
     required this.hand2,
     required this.handsDetected,
+    this.latencyMs = 0,
   });
 
   static const InferenceResult empty = InferenceResult(
@@ -23,17 +25,29 @@ class InferenceResult {
     hand1: HandData.empty,
     hand2: HandData.empty,
     handsDetected: 0,
+    latencyMs: 0,
   );
 
   bool get isConfident => confidence >= 0.75;
   bool get handDetected => handsDetected > 0;
   bool get bothHandsDetected => handsDetected >= 2;
 
-  List<LandmarkPoint> get allLandmarks =>
-      [...hand1.landmarks, ...hand2.landmarks];
+  List<LandmarkPoint> get allLandmarks => [
+    ...hand1.landmarks,
+    ...hand2.landmarks,
+  ];
 
   List<Offset> get landmarkOffsets =>
       allLandmarks.map((lm) => Offset(lm.x, lm.y)).toList();
+
+  /// Get landmarks as List<Offset> untuk UI Varian
+  /// Jika 1 tangan: return 21 titik dari hand1
+  /// Jika 2 tangan: return 42 titik (hand1 + hand2)
+  List<Offset> get landmarks {
+    if (handsDetected == 0) return [];
+    if (handsDetected == 1) return hand1.landmarkOffsets;
+    return [...hand1.landmarkOffsets, ...hand2.landmarkOffsets];
+  }
 }
 
 class IsolatePayload {

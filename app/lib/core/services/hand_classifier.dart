@@ -38,6 +38,7 @@ class HandClassifier {
     required HandData hand1,
     required HandData hand2,
     required int handsDetected,
+    int latencyMs = 0,
   }) {
     final now = DateTime.now().millisecondsSinceEpoch;
 
@@ -62,6 +63,7 @@ class HandClassifier {
       hand1: hand1,
       hand2: hand2,
       handsDetected: handsDetected,
+      latencyMs: latencyMs,
     );
   }
 }
