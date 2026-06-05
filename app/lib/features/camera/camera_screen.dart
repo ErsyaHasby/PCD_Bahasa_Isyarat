@@ -1,5 +1,5 @@
-import 'dart:typed_data' show Uint8List;
-import 'package:flutter/foundation.dart';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -7,8 +7,10 @@ import 'package:vibration/vibration.dart';
 import 'package:camera/camera.dart';
 
 import '../../core/models/inference_result.dart';
-import '../../core/services/pcd_pipeline.dart';
-import '../../core/services/pcd_frame_processor.dart';
+import '../../core/models/hand_data.dart';
+import '../../core/services/hand_landmark_detector.dart';
+import '../../core/services/hand_classifier.dart';
+import '../../core/services/hand_feature_extractor.dart';
 import '../../core/services/tts_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/journal_repository.dart';
@@ -22,12 +24,12 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen>
     with TickerProviderStateMixin {
-  // ── Services ───────────────────────────────────────────────────────
   final _tts = TtsService();
   final _repo = JournalRepository();
-  final _pcdProcessor = PcdFrameProcessor();
+  final _detector = HandLandmarkDetector();
+  final _classifier = HandClassifier();
+  final _extractor = HandFeatureExtractor();
 
-  // ── State ──────────────────────────────────────────────────────────
   InferenceResult _result = InferenceResult.empty;
   String _translatedText = '';
   CameraController? _cameraCtrl;
@@ -37,42 +39,45 @@ class _CameraScreenState extends State<CameraScreen>
   bool _isTtsEnabled = true;
   bool _isProcessing = false;
   String? _lastSpokenText;
-  bool _isSwitchingCamera = false;
 
-  // ── Hand Detection State ───────────────────────────────────────────
   bool _bothHandsDetected = false;
   bool _handReadyNotified = false;
   int _lastHandsCount = 0;
 
-  // ── Animations ─────────────────────────────────────────────────────
   late AnimationController _textCtrl;
   late Animation<Offset> _textSlide;
   late Animation<double> _textFade;
 
-  // ── Camera stream control ─────────────────────────────────────────
   bool _isStreaming = false;
   int _lastFrameMs = 0;
   int _lastLabelMs = 0;
-  int _lastUiUpdateMs = 0;
-  int _frameSkip = 1;
-  int _frameIndex = 0;
   String _stableLabel = '';
-  int _frameIntervalMs = 50;
-  bool _showOverlay = true;
+  static const int _frameIntervalMs = 250;
 
-  // ── Performance stats ─────────────────────────────────────────────
-  int _frameCounter = 0;
-  int _lastFpsTickMs = 0;
-  double _lastFps = 0;
-  double _smoothedFps = 0;
-  int _lastProcessMs = 0;
+  final List<List<LandmarkPoint>> _rawBuffer = [[], []];
+  int _sensorOrientation = 0;
 
   @override
   void initState() {
     super.initState();
     _setupAnimations();
     _tts.initialize();
+    _detector.initialize();
     _initRealCamera();
+  }
+
+  @override
+  void dispose() {
+    try {
+      if (_cameraCtrl?.value.isStreamingImages ?? false) {
+        _cameraCtrl?.stopImageStream();
+      }
+    } catch (_) {}
+    _cameraCtrl?.dispose();
+    _textCtrl.dispose();
+    _tts.dispose();
+    _detector.dispose();
+    super.dispose();
   }
 
   Future<void> _initRealCamera() async {
@@ -80,7 +85,9 @@ class _CameraScreenState extends State<CameraScreen>
       _cameras = await availableCameras();
       if (_cameras.isNotEmpty) {
         await _setCamera(
-          _isFrontCamera ? CameraLensDirection.front : CameraLensDirection.back,
+          _isFrontCamera
+              ? CameraLensDirection.front
+              : CameraLensDirection.back,
         );
       }
     } catch (e) {
@@ -90,9 +97,6 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _setCamera(CameraLensDirection dir) async {
     if (_cameras.isEmpty) return;
-    if (_isSwitchingCamera) return;
-    _isSwitchingCamera = true;
-    setState(() => _isCameraReady = false);
 
     CameraDescription? target;
     try {
@@ -102,6 +106,28 @@ class _CameraScreenState extends State<CameraScreen>
     }
 
     final oldCtrl = _cameraCtrl;
+    _cameraCtrl = CameraController(
+      target,
+      ResolutionPreset.medium,
+      enableAudio: false,
+    );
+
+    try {
+      await _cameraCtrl!.initialize();
+      if (!mounted) return;
+      _sensorOrientation = target.sensorOrientation;
+      debugPrint('Camera initialized successfully');
+      debugPrint('Camera previewSize: ${_cameraCtrl!.value.previewSize}');
+      debugPrint('Camera sensorOrientation: ${target.sensorOrientation}');
+      debugPrint('Camera isInitialized: ${_cameraCtrl!.value.isInitialized}');
+      debugPrint('Screen size: ${MediaQuery.of(context).size}');
+      setState(() => _isCameraReady = true);
+      await _startImageStream();
+    } catch (e) {
+      debugPrint('Camera set error: $e');
+      setState(() => _isCameraReady = false);
+    }
+
     if (oldCtrl != null) {
       try {
         if (oldCtrl.value.isStreamingImages) {
@@ -110,38 +136,6 @@ class _CameraScreenState extends State<CameraScreen>
       } catch (_) {}
       await oldCtrl.dispose();
     }
-
-    _isStreaming = false;
-    _isProcessing = false;
-    _lastFrameMs = 0;
-
-    final newCtrl = CameraController(
-      target,
-      ResolutionPreset.high,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.yuv420,
-    );
-
-    try {
-      await newCtrl.initialize();
-      if (!mounted) {
-        await newCtrl.dispose();
-        return;
-      }
-      setState(() {
-        _cameraCtrl = newCtrl;
-        _isCameraReady = true;
-      });
-      await newCtrl.startImageStream(_onCameraImage);
-      _isStreaming = true;
-    } catch (e) {
-      debugPrint('Camera set error: $e');
-      try {
-        await newCtrl.dispose();
-      } catch (_) {}
-    } finally {
-      _isSwitchingCamera = false;
-    }
   }
 
   void _setupAnimations() {
@@ -149,12 +143,12 @@ class _CameraScreenState extends State<CameraScreen>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-
     _textSlide = Tween<Offset>(
       begin: const Offset(0, 0.5),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _textCtrl, curve: Curves.easeOutCubic));
-    _textFade = CurvedAnimation(parent: _textCtrl, curve: Curves.easeOut);
+    _textFade =
+        CurvedAnimation(parent: _textCtrl, curve: Curves.easeOut);
   }
 
   Future<void> _startImageStream() async {
@@ -171,8 +165,6 @@ class _CameraScreenState extends State<CameraScreen>
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (nowMs - _lastFrameMs < _frameIntervalMs) return;
     _lastFrameMs = nowMs;
-    _frameIndex++;
-    if (_frameIndex % _frameSkip != 0) return;
     _processFrame(image);
   }
 
@@ -180,83 +172,125 @@ class _CameraScreenState extends State<CameraScreen>
     if (_isProcessing || !mounted) return;
     _isProcessing = true;
 
-    final sw = Stopwatch()..start();
     try {
-      final payload = IsolatePayload(
-        planes: _buildPlaneData(image.planes),
-        width: image.width,
-        height: image.height,
-        formatGroup: image.format.group.name,
-        isFrontCamera: _isFrontCamera,
+      final camera = _cameras.firstWhere(
+        (c) =>
+            c.lensDirection ==
+            (_isFrontCamera
+                ? CameraLensDirection.front
+                : CameraLensDirection.back),
+        orElse: () => _cameras.first,
       );
 
-      // Jalankan PCD + Inference di background isolate via compute()
-      final result = await _pcdProcessor.processFrame(payload);
-      sw.stop();
-      _lastProcessMs = sw.elapsedMilliseconds;
+      final handDataList = await _detector.processFrame(image, camera);
 
-      if (!mounted) return;
+      int handsDetected = handDataList.length;
 
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      if (nowMs - _lastUiUpdateMs >= 100) {
-        _lastUiUpdateMs = nowMs;
-        setState(() => _result = result);
+      if (!mounted) {
+        _isProcessing = false;
+        return;
+      }
 
-        // Cek deteksi 2 tangan
-        _checkHandsDetection(result);
+      // --- Feature pipeline (wrist-relative) for classifier ---
+      final normalized = _extractor.normalize(handDataList);
+      final smoothed = _extractor.smooth(normalized);
 
-        // Hanya proses gesture jika 2 tangan sudah terdeteksi
-        if (_bothHandsDetected) {
-          _maybeUpdateTranslation(result);
+      // --- Display pipeline (raw 0-1 image coords) for skeleton overlay ---
+      final rawSmoothed = _smoothRawLandmarks(handDataList);
+
+      // Mirror horizontally for front camera (camera preview is mirrored)
+      if (_isFrontCamera) {
+        for (int h = 0; h < rawSmoothed.length; h++) {
+          rawSmoothed[h] = rawSmoothed[h].map((lm) => LandmarkPoint(
+            x: 1.0 - lm.x,
+            y: lm.y,
+            z: lm.z,
+          )).toList();
         }
       }
+
+      final hand1 = handDataList.isNotEmpty
+          ? HandData(
+              landmarks: rawSmoothed[0],
+              isDetected: handDataList[0].isDetected)
+          : HandData.empty;
+      final hand2 = handDataList.length >= 2
+          ? HandData(
+              landmarks: rawSmoothed[1],
+              isDetected: handDataList[1].isDetected)
+          : HandData.empty;
+
+      final featureSet = _extractor.extractAll(smoothed);
+      handsDetected = featureSet.handCount;
+
+      final result = _classifier.classify(
+        hand1: hand1,
+        hand2: hand2,
+        handsDetected: handsDetected,
+      );
+
+      setState(() => _result = result);
+      _checkHandsDetection(result);
+
+      if (_bothHandsDetected) {
+        _maybeUpdateTranslation(result);
+      }
     } catch (e) {
-      debugPrint('PCD process error: $e');
-    } finally {
-      _isProcessing = false;
-      _trackFps();
+      debugPrint('Process frame error: $e');
     }
+
+    _isProcessing = false;
   }
 
-  void _trackFps() {
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (_lastFpsTickMs == 0) _lastFpsTickMs = nowMs;
-    _frameCounter++;
-    final elapsed = nowMs - _lastFpsTickMs;
-    if (elapsed >= 1000) {
-      _lastFps = _frameCounter * 1000 / elapsed;
-      _smoothedFps = _smoothedFps == 0
-          ? _lastFps
-          : (_smoothedFps * 0.8) + (_lastFps * 0.2);
-      _frameCounter = 0;
-      _lastFpsTickMs = nowMs;
-      debugPrint(
-        'PCD perf | fps=${_lastFps.toStringAsFixed(1)} '
-        '| ms=${_lastProcessMs}',
-      );
+  List<List<LandmarkPoint>> _smoothRawLandmarks(List<HandData> hands) {
+    // EMA alpha: higher = more responsive (less smoothing)
+    // 0.8 means 80% new + 20% previous — reduces jitter without noticeable lag
+    const double alpha = 0.8;
+    final result = <List<LandmarkPoint>>[];
+
+    for (int h = 0; h < 2; h++) {
+      if (h < hands.length && hands[h].isDetected) {
+        final raw = hands[h].landmarks;
+
+        if (_rawBuffer[h].isEmpty) {
+          // First detection — initialise EMA with raw frame
+          _rawBuffer[h] = raw.map((lm) => LandmarkPoint(
+            x: lm.x, y: lm.y, z: lm.z,
+          )).toList();
+        } else {
+          // EMA update: blend current raw into stored EMA
+          for (int i = 0; i < HandData.landmarkCount && i < raw.length; i++) {
+            final prev = _rawBuffer[h][i];
+            final cur = raw[i];
+            _rawBuffer[h][i] = LandmarkPoint(
+              x: alpha * cur.x + (1 - alpha) * prev.x,
+              y: alpha * cur.y + (1 - alpha) * prev.y,
+              z: alpha * cur.z + (1 - alpha) * prev.z,
+            );
+          }
+        }
+
+        // Use EMA value for display
+        result.add(List<LandmarkPoint>.from(_rawBuffer[h]));
+      } else {
+        // Hand lost — clear buffer
+        _rawBuffer[h].clear();
+        result.add(List<LandmarkPoint>.filled(
+          HandData.landmarkCount,
+          LandmarkPoint.zero,
+        ));
+      }
     }
 
-    // Adapt processing interval based on workload
-    if (_lastProcessMs > 60) {
-      _frameIntervalMs = 80;
-      _frameSkip = 3;
-    } else if (_lastProcessMs > 45) {
-      _frameIntervalMs = 60;
-      _frameSkip = 2;
-    } else if (_lastProcessMs < 35) {
-      _frameIntervalMs = 50;
-      _frameSkip = 1;
-    }
+    return result;
   }
 
   void _checkHandsDetection(InferenceResult result) {
     final handsCount = result.handsDetected;
 
-    // Deteksi perubahan status
     if (handsCount >= 2 && !_bothHandsDetected) {
       setState(() => _bothHandsDetected = true);
-      _handReadyNotified = false; // Reset flag
-      // Trigger notifikasi
+      _handReadyNotified = false;
       _notifyHandsReady();
     } else if (handsCount < 2 && _bothHandsDetected) {
       setState(() {
@@ -273,25 +307,10 @@ class _CameraScreenState extends State<CameraScreen>
     if (_handReadyNotified) return;
     _handReadyNotified = true;
 
-    // Suara notifikasi
     if (_isTtsEnabled) {
       _tts.speak('Tangan terdeteksi. Siap meragakan isyarat.');
       Vibration.vibrate(duration: 150, amplitude: 255);
     }
-  }
-
-  List<PlaneData> _buildPlaneData(List<Plane> planes) {
-    return planes
-        .map(
-          (p) => PlaneData(
-            bytes: Uint8List.fromList(p.bytes),
-            bytesPerRow: p.bytesPerRow,
-            bytesPerPixel: p.bytesPerPixel ?? 1,
-            width: p.width ?? 0,
-            height: p.height ?? 0,
-          ),
-        )
-        .toList(growable: false);
   }
 
   void _maybeUpdateTranslation(InferenceResult result) {
@@ -314,16 +333,13 @@ class _CameraScreenState extends State<CameraScreen>
     setState(() => _translatedText = text);
     _textCtrl.forward(from: 0);
 
-    // TTS output
     if (_isTtsEnabled && text != _lastSpokenText) {
       _tts.speak(text);
       _lastSpokenText = text;
     }
 
-    // Haptic feedback
     Vibration.vibrate(duration: 80, amplitude: 128);
 
-    // Simpan ke jurnal (Hive)
     _repo.saveEntry(
       translatedText: text,
       confidenceScore: confidence,
@@ -331,10 +347,12 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  Future<void> _toggleCamera() async {
+  void _toggleCamera() {
     setState(() => _isFrontCamera = !_isFrontCamera);
-    await _setCamera(
-      _isFrontCamera ? CameraLensDirection.front : CameraLensDirection.back,
+    _setCamera(
+      _isFrontCamera
+          ? CameraLensDirection.front
+          : CameraLensDirection.back,
     );
     HapticFeedback.lightImpact();
   }
@@ -346,54 +364,30 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   @override
-  void dispose() {
-    try {
-      if (_cameraCtrl?.value.isStreamingImages ?? false) {
-        _cameraCtrl?.stopImageStream();
-      }
-    } catch (_) {}
-    _cameraCtrl?.dispose();
-    _pcdProcessor.dispose();
-    _textCtrl.dispose();
-    _tts.dispose();
-    super.dispose();
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  //  BUILD
-  // ═══════════════════════════════════════════════════════════════════
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Camera preview ──────────────────────────────────────────
           if (_cameraCtrl != null && _cameraCtrl!.value.isInitialized)
-            SizedBox.expand(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _cameraCtrl!.value.previewSize?.height ?? 1,
-                  height: _cameraCtrl!.value.previewSize?.width ?? 1,
-                  child: CameraPreview(_cameraCtrl!),
-                ),
-              ),
+            Positioned.fill(
+              child: CameraPreview(_cameraCtrl!),
             )
           else
             _buildCameraBackground(),
 
-          // ── Hand skeleton overlay ───────────────────────────────────
-          if (_isCameraReady && _showOverlay)
+          if (_isCameraReady)
             CustomPaint(
               painter: HandOverlayPainter(
                 result: _result,
-                previewSize: MediaQuery.of(context).size,
+                previewSize: _cameraCtrl!.value.previewSize ?? MediaQuery.of(context).size,
+                screenSize: MediaQuery.of(context).size,
+                isFrontCamera: _isFrontCamera,
+                sensorOrientation: _sensorOrientation,
               ),
             ),
 
-          // ── Hand detection status (simple text only) ────────────────
           if (_isCameraReady)
             Positioned(
               top: 16,
@@ -418,7 +412,7 @@ class _CameraScreenState extends State<CameraScreen>
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          'Deteksi: ${_lastHandsCount} tangan',
+                          'Deteksi: $_lastHandsCount tangan',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppTheme.textHint,
@@ -430,29 +424,6 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
 
-          // ── Perf overlay (FPS + latency) ───────────────────────────
-          if (_isCameraReady)
-            Positioned(
-              top: 72,
-              left: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.divider),
-                ),
-                child: Text(
-                  'FPS ${_smoothedFps.toStringAsFixed(1)} | ${_lastProcessMs}ms',
-                  style: TextStyle(fontSize: 11, color: AppTheme.textHint),
-                ),
-              ),
-            ),
-
-          // ── Top right buttons ────────────────────────────────────────
           if (_isCameraReady)
             Positioned(
               top: 16,
@@ -472,29 +443,17 @@ class _CameraScreenState extends State<CameraScreen>
                       icon: Icons.flip_camera_android_rounded,
                       onTap: _toggleCamera,
                     ),
-                    const SizedBox(width: 8),
-                    _CircleButton(
-                      icon: _showOverlay
-                          ? Icons.visibility_rounded
-                          : Icons.visibility_off_rounded,
-                      onTap: () {
-                        setState(() => _showOverlay = !_showOverlay);
-                        HapticFeedback.lightImpact();
-                      },
-                    ),
                   ],
                 ),
               ),
             ),
 
-          // ── Translation panel (bottom) ──────────────────────────────
           if (_bothHandsDetected)
             Align(
               alignment: Alignment.bottomCenter,
               child: _buildTranslationPanel(),
             ),
 
-          // ── Hand detection awaiting ─────────────────────────────────
           if (!_bothHandsDetected && _isCameraReady)
             Align(
               alignment: Alignment.bottomCenter,
@@ -524,14 +483,12 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
 
-          // ── Loading overlay ───────────────────────────────────────────
           if (!_isCameraReady) _buildLoadingOverlay(),
         ],
       ),
     );
   }
 
-  // ── Camera Background (simulasi, ganti dengan CameraPreview) ────────
   Widget _buildCameraBackground() {
     return Container(
       decoration: const BoxDecoration(
@@ -564,13 +521,6 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  // ── Top App Bar ──────────────────────────────────────────────────────
-  // REMOVED: Simplified UI
-
-  // ── Guide Overlay ────────────────────────────────────────────────────
-  // REMOVED: Simplified UI
-
-  // ── Translation Panel ─────────────────────────────────────────────────
   Widget _buildTranslationPanel() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -618,7 +568,6 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  // ── Loading Overlay ───────────────────────────────────────────────────
   Widget _buildLoadingOverlay() {
     return Container(
       color: Colors.black87,
@@ -638,10 +587,6 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════
-//  Reusable Widgets
-// ═══════════════════════════════════════════════════════════════════════
 
 class _CircleButton extends StatelessWidget {
   final IconData icon;
@@ -667,10 +612,6 @@ class _CircleButton extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  Additional Widgets (Confidence Bar, etc)
-// ═══════════════════════════════════════════════════════════════════════
-
 class _ConfidenceBar extends StatelessWidget {
   final double confidence;
   const _ConfidenceBar({required this.confidence});
@@ -680,8 +621,8 @@ class _ConfidenceBar extends StatelessWidget {
     final color = confidence >= 0.85
         ? AppTheme.success
         : confidence >= 0.70
-        ? AppTheme.warning
-        : AppTheme.error;
+            ? AppTheme.warning
+            : AppTheme.error;
     return Row(
       children: [
         Text(
@@ -709,156 +650,6 @@ class _ConfidenceBar extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _GuideOverlayPainter extends CustomPainter {
-  final double pulse;
-  final bool handDetected;
-
-  _GuideOverlayPainter({required this.pulse, required this.handDetected});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = (handDetected ? AppTheme.success : Colors.white).withOpacity(
-        0.7,
-      )
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    final glow = Paint()
-      ..color = (handDetected ? AppTheme.success : AppTheme.primary)
-          .withOpacity(0.2)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-
-    final faceRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(size.width * 0.5, size.height * 0.28),
-        width: size.width * 0.55,
-        height: size.height * 0.26,
-      ),
-      const Radius.circular(28),
-    );
-
-    final handRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(size.width * 0.5, size.height * 0.68),
-        width: size.width * 0.72,
-        height: size.height * 0.30,
-      ),
-      const Radius.circular(28),
-    );
-
-    canvas.drawRRect(faceRect, glow);
-    canvas.drawRRect(handRect, glow);
-    canvas.drawRRect(faceRect, paint);
-    canvas.drawRRect(handRect, paint);
-
-    _drawLabel(canvas, size, 'Wajah', faceRect, pulse);
-    _drawLabel(canvas, size, 'Tangan', handRect, pulse);
-  }
-
-  void _drawLabel(
-    Canvas canvas,
-    Size size,
-    String text,
-    RRect rect,
-    double pulse,
-  ) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.9),
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final offset = Offset(rect.left + 16, rect.top - 22 - (pulse - 1) * 6);
-
-    final bg = Paint()
-      ..color = Colors.black.withOpacity(0.4)
-      ..style = PaintingStyle.fill;
-
-    final bgRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(offset.dx - 6, offset.dy - 2, tp.width + 12, tp.height + 6),
-      const Radius.circular(12),
-    );
-
-    canvas.drawRRect(bgRect, bg);
-    tp.paint(canvas, offset);
-  }
-
-  @override
-  bool shouldRepaint(covariant _GuideOverlayPainter oldDelegate) {
-    return oldDelegate.pulse != pulse ||
-        oldDelegate.handDetected != handDetected;
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.25)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomGradient extends StatelessWidget {
-  const _BottomGradient();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 320,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
-        ),
-      ),
     );
   }
 }

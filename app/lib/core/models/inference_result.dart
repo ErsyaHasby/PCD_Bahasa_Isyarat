@@ -1,51 +1,62 @@
 import 'dart:typed_data' show Uint8List;
 import 'dart:ui' show Offset;
+import 'package:flutter/foundation.dart';
+import 'hand_data.dart';
 
 /// Hasil output dari Background Isolate setelah PCD + Inference
+/// Menggunakan HandData (Alex) untuk MediaPipe integration
+/// Backward compatibility dengan List<<Offset> (Ersya) untuk fallback
 class InferenceResult {
-  final String label; // Label gestur (contoh: "Halo", "A", "Terima Kasih")
-  final double confidence; // Skor kepercayaan 0.0 - 1.0
-  final List<Offset>
-  landmarks; // 21 koordinat tangan (sudah dinormalisasi 0.0-1.0)
-  final int handsDetected; // Jumlah tangan terdeteksi (0, 1, atau 2)
+  final String label;
+  final double confidence;
+  final HandData hand1;
+  final HandData hand2;
+  final int handsDetected;
 
   const InferenceResult({
     required this.label,
     required this.confidence,
-    required this.landmarks,
+    required this.hand1,
+    required this.hand2,
     required this.handsDetected,
   });
 
   static const InferenceResult empty = InferenceResult(
     label: '',
     confidence: 0.0,
-    landmarks: [],
+    hand1: HandData.empty,
+    hand2: HandData.empty,
     handsDetected: 0,
   );
 
   bool get isConfident => confidence >= 0.75;
   bool get handDetected => handsDetected > 0;
   bool get bothHandsDetected => handsDetected >= 2;
+
+  List<LandmarkPoint> get allLandmarks =>
+      [...hand1.landmarks, ...hand2.landmarks];
+
+  List<<Offset> get landmarkOffsets =>
+      allLandmarks.map((lm) => Offset(lm.x, lm.y)).toList();
 }
 
-/// Data yang dikirim ke Background Isolate
+/// Data yang dikirim ke Background Isolate (Alex's version untuk MediaPipe)
 class IsolatePayload {
-  final List<PlaneData> planes;
+  final Uint8List bytes;
   final int width;
   final int height;
-  final String formatGroup;
   final bool isFrontCamera;
 
   const IsolatePayload({
-    required this.planes,
+    required this.bytes,
     required this.width,
     required this.height,
-    required this.formatGroup,
     required this.isFrontCamera,
   });
 }
 
-/// Plane metadata + bytes untuk CameraImage (aman dikirim ke isolate)
+/// Plane metadata + bytes untuk CameraImage (Ersya's version untuk PCD fallback)
+/// Disimpan sebagai reference untuk TFLite fallback jika MediaPipe tidak tersedia
 class PlaneData {
   final Uint8List bytes;
   final int bytesPerRow;

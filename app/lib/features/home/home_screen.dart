@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/journal_repository.dart';
 
@@ -145,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Start Button ─────────────────────────────────────────────────────
   Widget _buildStartButton(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.go('/camera'),
+      onTap: () => _requestCameraAndNavigate(context),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         width: double.infinity,
@@ -181,6 +182,41 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _requestCameraAndNavigate(BuildContext context) async {
+    final status = await Permission.camera.request();
+    if (status.isGranted) {
+      if (context.mounted) {
+        context.go('/camera');
+      }
+    } else if (status.isPermanentlyDenied) {
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Izin Kamera Diperlukan'),
+            content: const Text(
+              'Aplikasi memerlukan izin kamera untuk mendeteksi isyarat tangan. '
+              'Silakan buka pengaturan dan aktifkan izin kamera.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Batal'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  openAppSettings();
+                },
+                child: const Text('Pengaturan'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   // ── Feature Cards ────────────────────────────────────────────────────
