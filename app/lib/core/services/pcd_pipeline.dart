@@ -43,9 +43,12 @@ Float32List _preprocessFromPlanes(IsolatePayload payload) {
   final startX = (width - cropSize) ~/ 2;
   final startY = (height - cropSize) ~/ 2;
 
-  // Langkah 3: Resize ke input model (sementara diperkecil untuk FPS)
-  // TODO: Samakan dengan ukuran input model final.
-  const modelSize = 128;
+  // Langkah 3: Resize ke input model
+  // Ukuran 224x224 dipilih berdasarkan:
+  // - TASK_BREAKDOWN.md line 67: target 224x224
+  // - MediaPipe Hands optimal: 256x256 (dokumentasi resmi)
+  // - Kompromi akurasi vs latency (target preprocessing < 50 ms)
+  const modelSize = 224;
 
   // Langkah 4: Normalisasi [0,255] → [0.0, 1.0] Float32
   final result = Float32List(modelSize * modelSize * 3);
