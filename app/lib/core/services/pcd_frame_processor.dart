@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:isolate';
+import 'package:flutter/services.dart';
 
 import '../models/inference_result.dart';
 import 'pcd_pipeline.dart';
@@ -8,6 +9,16 @@ class PcdFrameProcessor {
   Isolate? _isolate;
   SendPort? _sendPort;
   Future<void>? _init;
+  
+  // Cache for assets
+  Uint8List? _modelBytes;
+  String? _labelsJson;
+
+  Future<void> initialize(Uint8List modelBytes, String labelsJson) async {
+    _modelBytes = modelBytes;
+    _labelsJson = labelsJson;
+    await _ensureIsolate();
+  }
 
   Future<InferenceResult> processFrame(IsolatePayload payload) async {
     await _ensureIsolate();
@@ -24,7 +35,15 @@ class PcdFrameProcessor {
     _init = ready.future;
 
     final initPort = ReceivePort();
-    Isolate.spawn(_pcdIsolateEntry, initPort.sendPort).then((isolate) {
+    final token = RootIsolateToken.instance!;
+    final payload = InitPayload(
+      sendPort: initPort.sendPort,
+      token: token,
+      modelBytes: _modelBytes,
+      labelsJson: _labelsJson,
+    );
+
+    Isolate.spawn(_pcdIsolateEntry, payload).then((isolate) {
       _isolate = isolate;
     });
 
@@ -47,9 +66,29 @@ class PcdFrameProcessor {
   }
 }
 
-void _pcdIsolateEntry(SendPort mainPort) {
+class InitPayload {
+  final SendPort sendPort;
+  final RootIsolateToken token;
+  final Uint8List? modelBytes;
+  final String? labelsJson;
+  InitPayload({
+    required this.sendPort,
+    required this.token,
+    this.modelBytes,
+    this.labelsJson,
+  });
+}
+
+Future<void> _pcdIsolateEntry(InitPayload initPayload) async {
+  // 1. Initialize Flutter platform channels in the background isolate
+  BackgroundIsolateBinaryMessenger.ensureInitialized(initPayload.token);
+
+  // 2. Setup the pipeline state
+  await setupPcdPipeline(initPayload.modelBytes, initPayload.labelsJson);
+
+  // 3. Setup communication
   final port = ReceivePort();
-  mainPort.send(port.sendPort);
+  initPayload.sendPort.send(port.sendPort);
 
   port.listen((message) async {
     final payload = message[0] as IsolatePayload;

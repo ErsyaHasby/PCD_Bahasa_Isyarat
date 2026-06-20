@@ -50,16 +50,27 @@ class InferenceResult {
   }
 }
 
-class IsolatePayload {
+class PlaneData {
   final Uint8List bytes;
+  final int bytesPerRow;
+  final int? bytesPerPixel;
+  PlaneData({required this.bytes, required this.bytesPerRow, this.bytesPerPixel});
+}
+
+class IsolatePayload {
+  final List<PlaneData> planes;
   final int width;
   final int height;
+  final String formatGroup;
   final bool isFrontCamera;
+  final int sensorOrientation;
 
   const IsolatePayload({
-    required this.bytes,
+    required this.planes,
     required this.width,
     required this.height,
+    required this.formatGroup,
     required this.isFrontCamera,
+    required this.sensorOrientation,
   });
 }

@@ -9,9 +9,10 @@ import '../../core/models/inference_result.dart';
 import '../../core/models/hand_data.dart';
 import '../../core/services/hand_landmark_detector.dart';
 import '../../core/services/hand_classifier.dart';
-import '../../core/services/tts_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/journal_repository.dart';
+import '../../core/services/pcd_frame_processor.dart';
+import '../../core/services/tts_service.dart';
 import 'hand_overlay_painter.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -25,8 +26,7 @@ class _CameraScreenState extends State<CameraScreen>
   // ── Services ───────────────────────────────────────────────────────
   final _tts = TtsService();
   final _repo = JournalRepository();
-  final _detector = HandLandmarkDetector();
-  final _classifier = HandClassifier();
+  final _pcdProcessor = PcdFrameProcessor();
 
   // ── State ──────────────────────────────────────────────────────────
   InferenceResult _result = InferenceResult.empty;
@@ -55,10 +55,8 @@ class _CameraScreenState extends State<CameraScreen>
 
   // ── Camera stream control ─────────────────────────────────────────
   bool _isStreaming = false;
-  int _lastFrameMs = 0;
   int _lastLabelMs = 0;
   String _stableLabel = '';
-  static const int _frameIntervalMs = 250;
   int _sensorOrientation = 0;
 
   @override
@@ -66,8 +64,6 @@ class _CameraScreenState extends State<CameraScreen>
     super.initState();
     _setupAnimations();
     _tts.initialize();
-    _detector.initialize();
-    _classifier.initialize();
     _preloadAssets();
     _initRealCamera();
   }
@@ -77,6 +73,9 @@ class _CameraScreenState extends State<CameraScreen>
       final bytes = await rootBundle.load('assets/models/gesture_model.onnx');
       _modelBytes = bytes.buffer.asUint8List();
       _labelsJson = await rootBundle.loadString('assets/models/labels.json');
+      
+      // Initialize persistent background isolate
+      await _pcdProcessor.initialize(_modelBytes!, _labelsJson!);
     } catch (e) {
       debugPrint('Failed to preload ONNX assets: $e');
     }
@@ -147,6 +146,14 @@ class _CameraScreenState extends State<CameraScreen>
     _textFade = CurvedAnimation(parent: _textCtrl, curve: Curves.easeOut);
   }
 
+  List<PlaneData> _buildPlaneData(List<Plane> planes) {
+    return planes.map((p) => PlaneData(
+      bytes: p.bytes,
+      bytesPerRow: p.bytesPerRow,
+      bytesPerPixel: p.bytesPerPixel,
+    )).toList();
+  }
+
   Future<void> _startImageStream() async {
     if (_cameraCtrl == null || _isStreaming) return;
     try {
@@ -158,92 +165,42 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   void _onCameraImage(CameraImage image) {
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (nowMs - _lastFrameMs < _frameIntervalMs) return;
-    _lastFrameMs = nowMs;
     _processFrame(image);
   }
 
   Future<void> _processFrame(CameraImage image) async {
     if (_isProcessing || !mounted) return;
     _isProcessing = true;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // Detect landmarks using MediaPipe (Alex's pipeline)
-    final hands = await _detector.processFrame(
-      image,
-      _cameras.first,
-      isFrontCamera: _isFrontCamera,
-    );
+    try {
+      final payload = IsolatePayload(
+        planes: _buildPlaneData(image.planes),
+        width: image.width,
+        height: image.height,
+        formatGroup: image.format.group.name,
+        isFrontCamera: _isFrontCamera,
+        sensorOrientation: _sensorOrientation,
+      );
 
-    if (!mounted) {
-      _isProcessing = false;
-      return;
+      // Run MediaPipe & ONNX entirely in the persistent background isolate!
+      final result = await _pcdProcessor.processFrame(payload);
+
+      if (!mounted) return;
+
+      setState(() => _result = result);
+      _checkHandsDetection(result);
+      if (_bothHandsDetected) {
+        _maybeUpdateTranslation(result);
+      }
+    } catch (e) {
+      debugPrint('PCD process error: $e');
+    } finally {
+      if (mounted) _isProcessing = false;
     }
-
-    // Classify gesture using compute (Priority 4)
-    final hand1 = hands.isNotEmpty ? hands[0] : HandData.empty;
-    final hand2 = hands.length > 1 ? hands[1] : HandData.empty;
-
-    InferenceResult result;
-    if (hands.isEmpty) {
-      result = InferenceResult.empty;
-    } else {
-      final token = RootIsolateToken.instance!;
-      result = await compute(_processFrameIsolate, {
-        'token': token,
-        'hand1': hand1,
-        'hand2': hand2,
-        'handsDetected': hands.length,
-        'latencyMs': DateTime.now().millisecondsSinceEpoch - _lastFrameMs,
-        'modelBytes': _modelBytes,
-        'labelsJson': _labelsJson,
-      });
-    }
-
-    if (!mounted) {
-      _isProcessing = false;
-      return;
-    }
-
-    setState(() => _result = result);
-
-    // Cek deteksi 2 tangan
-    _checkHandsDetection(result);
-
-    // Hanya proses gesture jika 2 tangan sudah terdeteksi
-    if (_bothHandsDetected) {
-      _maybeUpdateTranslation(result);
-    }
-
-    _isProcessing = false;
   }
 
-  /// Static function untuk dijalankan di background isolate menggunakan compute()
-  static Future<InferenceResult> _processFrameIsolate(Map<String, dynamic> args) async {
-    final token = args['token'] as RootIsolateToken;
-    BackgroundIsolateBinaryMessenger.ensureInitialized(token);
-
-    final hand1 = args['hand1'] as HandData;
-    final hand2 = args['hand2'] as HandData;
-    final handsDetected = args['handsDetected'] as int;
-    final latencyMs = args['latencyMs'] as int;
-    final modelBytes = args['modelBytes'] as Uint8List?;
-    final labelsJson = args['labelsJson'] as String?;
-
-    // Inisialisasi classifier di dalam isolate menggunakan byte cache
-    final classifier = HandClassifier();
-    await classifier.initialize(modelBytes: modelBytes, labelsJson: labelsJson);
-
-    final result = classifier.classify(
-      hand1: hand1,
-      hand2: hand2,
-      handsDetected: handsDetected,
-      latencyMs: latencyMs,
-    );
-
-    classifier.dispose();
-    return result;
-  }
+  // _processFrameIsolate dihilangkan karena menggunakan PcdFrameProcessor
 
   void _checkHandsDetection(InferenceResult result) {
     final handsCount = result.handsDetected;
@@ -337,8 +294,7 @@ class _CameraScreenState extends State<CameraScreen>
     _cameraCtrl?.dispose();
     _textCtrl.dispose();
     _tts.dispose();
-    _detector.dispose();
-    _classifier.dispose();
+    _pcdProcessor.dispose();
     super.dispose();
   }
 

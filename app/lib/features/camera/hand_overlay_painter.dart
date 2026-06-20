@@ -69,13 +69,13 @@ class HandOverlayPainter extends CustomPainter {
     Offset offset;
 
     if (screenAspect > cameraAspect) {
-      // Screen is wider than camera - height constrained, letterboxing on left/right
-      displayedSize = Size(size.height * cameraAspect, size.height);
-      offset = Offset((size.width - displayedSize.width) / 2, 0);
-    } else {
-      // Screen is taller than camera - width constrained, letterboxing on top/bottom
+      // Screen is wider than camera - width fills screen, height overflows (BoxFit.cover)
       displayedSize = Size(size.width, size.width / cameraAspect);
       offset = Offset(0, (size.height - displayedSize.height) / 2);
+    } else {
+      // Screen is taller than camera - height fills screen, width overflows (BoxFit.cover)
+      displayedSize = Size(size.height * cameraAspect, size.height);
+      offset = Offset((size.width - displayedSize.width) / 2, 0);
     }
 
     debugPrint(

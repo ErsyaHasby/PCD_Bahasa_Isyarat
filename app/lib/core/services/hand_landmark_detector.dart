@@ -13,7 +13,7 @@ class HandLandmarkDetector {
     try {
       _plugin = HandLandmarkerPlugin.create(
         numHands: 2,
-        minHandDetectionConfidence: 0.7,
+        minHandDetectionConfidence: 0.5,
         delegate: HandLandmarkerDelegate.cpu,
       );
       _initialized = true;
@@ -97,14 +97,16 @@ class HandLandmarkDetector {
             dx = lm.x;
             dy = lm.y;
           case 90:
-            dx = lm.y;
-            dy = 1.0 - lm.x;
+            // Swapped with 270 to fix 180-degree inversion
+            dx = 1.0 - lm.y;
+            dy = lm.x;
           case 180:
             dx = 1.0 - lm.x;
             dy = 1.0 - lm.y;
           case 270:
-            dx = 1.0 - lm.y;
-            dy = lm.x;
+            // Swapped with 90 to fix 180-degree inversion
+            dx = lm.y;
+            dy = 1.0 - lm.x;
           default:
             dx = lm.x;
             dy = lm.y;
