@@ -8,6 +8,7 @@ class OnnxInferenceService {
   OrtSession? _session;
   OrtSessionOptions? _sessionOptions;
   List<String> _labels = [];
+  String? _inputName;
   bool _initialized = false;
 
   Future<void> initialize() async {
@@ -27,6 +28,18 @@ class OnnxInferenceService {
 
       // Create ONNX session
       _session = OrtSession.fromBuffer(modelData, _sessionOptions!);
+
+      // Get input/output names from model metadata
+      final inputNames = _session!.inputNames;
+      final outputNames = _session!.outputNames;
+      print('ONNX: Input names: $inputNames');
+      print('ONNX: Output names: $outputNames');
+
+      // Store the first input name
+      if (inputNames.isNotEmpty) {
+        _inputName = inputNames.first;
+        print('ONNX: Using input name: $_inputName');
+      }
 
       _initialized = true;
       print('ONNX Inference Service initialized with ${_labels.length} labels');
@@ -67,7 +80,7 @@ class OnnxInferenceService {
       );
 
       // Run inference
-      final inputs = {'input': inputOrt};
+      final inputs = {_inputName ?? 'input': inputOrt};
       final outputs = _session!.run(OrtRunOptions(), inputs);
       print('ONNX: Inference completed, outputs=${outputs.length}');
 
