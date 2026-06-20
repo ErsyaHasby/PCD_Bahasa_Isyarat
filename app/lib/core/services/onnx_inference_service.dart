@@ -91,7 +91,8 @@ class OnnxInferenceService {
         print('ONNX: Output is null');
         return {'label': '', 'confidence': 0.0};
       }
-      final outputList = outputOrt.value as List<double>;
+      final outputDynamic = outputOrt.value as List<dynamic>;
+      final outputList = outputDynamic.map((e) => (e as num).toDouble()).toList();
       print('ONNX: Output list length=${outputList.length}');
 
       // Get predicted label and confidence
