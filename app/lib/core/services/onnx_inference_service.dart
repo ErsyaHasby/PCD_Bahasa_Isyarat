@@ -94,6 +94,7 @@ class OnnxInferenceService {
       final outputDynamic = outputOrt.value as List<dynamic>;
       final outputList = outputDynamic.map((e) => (e as num).toDouble()).toList();
       print('ONNX: Output list length=${outputList.length}');
+      print('ONNX: All output values: ${outputList.map((e) => e.toStringAsFixed(2)).join(', ')}');
 
       // Get predicted label and confidence
       final maxIndex = _argMax(outputList);
