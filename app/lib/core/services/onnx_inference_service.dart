@@ -72,6 +72,8 @@ class OnnxInferenceService {
       // Based on svm_params.json: 63 features (21 landmarks x 3 for 1 hand)
       final input = _prepareInputTensor(hand1);
       print('ONNX: Input tensor prepared, length=${input.length}');
+      print('ONNX: First 5 input values: ${input.take(5).map((e) => e.toStringAsFixed(2)).join(', ')}');
+      print('ONNX: Last 5 input values: ${input.skip(input.length - 5).map((e) => e.toStringAsFixed(2)).join(', ')}');
 
       // Create input tensor
       final inputOrt = OrtValueTensor.createTensorWithDataList(
@@ -96,11 +98,28 @@ class OnnxInferenceService {
       print('ONNX: Output list length=${outputList.length}');
       print('ONNX: All output values: ${outputList.map((e) => e.toStringAsFixed(2)).join(', ')}');
 
-      // Get predicted label and confidence
-      final maxIndex = _argMax(outputList);
-      final confidence = outputList[maxIndex];
-      final label = maxIndex < _labels.length ? _labels[maxIndex] : '';
-      print('ONNX: Predicted label=$label, confidence=$confidence');
+      // Check if output is label index (single value) or probabilities (26 values)
+      String label;
+      double confidence;
+
+      if (outputList.length == 1) {
+        // Output is label index
+        final labelIndex = outputList[0].toInt();
+        label = labelIndex < _labels.length ? _labels[labelIndex] : '';
+        confidence = 1.0; // Default confidence for index-based output
+        print('ONNX: Output is label index=$labelIndex, label=$label');
+      } else if (outputList.length == 26) {
+        // Output is probabilities
+        final maxIndex = _argMax(outputList);
+        confidence = outputList[maxIndex];
+        label = maxIndex < _labels.length ? _labels[maxIndex] : '';
+        print('ONNX: Output is probabilities, maxIndex=$maxIndex, label=$label, confidence=$confidence');
+      } else {
+        // Unknown format
+        label = '';
+        confidence = 0.0;
+        print('ONNX: Unknown output format, length=${outputList.length}');
+      }
 
       // Clean up
       inputOrt.release();
