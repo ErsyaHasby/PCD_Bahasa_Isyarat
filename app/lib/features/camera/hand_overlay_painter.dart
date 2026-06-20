@@ -19,12 +19,29 @@ class HandOverlayPainter extends CustomPainter {
   });
 
   static const List<List<int>> _connections = [
-    [0, 1], [1, 2], [2, 3], [3, 4],
-    [0, 5], [5, 6], [6, 7], [7, 8],
-    [0, 9], [9, 10], [10, 11], [11, 12],
-    [0, 13], [13, 14], [14, 15], [15, 16],
-    [0, 17], [17, 18], [18, 19], [19, 20],
-    [5, 9], [9, 13], [13, 17],
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [0, 5],
+    [5, 6],
+    [6, 7],
+    [7, 8],
+    [0, 9],
+    [9, 10],
+    [10, 11],
+    [11, 12],
+    [0, 13],
+    [13, 14],
+    [14, 15],
+    [15, 16],
+    [0, 17],
+    [17, 18],
+    [18, 19],
+    [19, 20],
+    [5, 9],
+    [9, 13],
+    [13, 17],
   ];
 
   static const List<Color> _fingerColors = [
@@ -46,11 +63,11 @@ class HandOverlayPainter extends CustomPainter {
     final dispH = isRotated ? previewSize.width : previewSize.height;
     final cameraAspect = dispW / dispH;
     final screenAspect = screenSize.width / screenSize.height;
-    
+
     // Calculate actual displayed camera preview size (with aspect ratio preservation)
     Size displayedSize;
     Offset offset;
-    
+
     if (screenAspect > cameraAspect) {
       // Screen is wider than camera - height constrained, letterboxing on left/right
       displayedSize = Size(size.height * cameraAspect, size.height);
@@ -60,12 +77,18 @@ class HandOverlayPainter extends CustomPainter {
       displayedSize = Size(size.width, size.width / cameraAspect);
       offset = Offset(0, (size.height - displayedSize.height) / 2);
     }
-    
-    debugPrint('OverlayPainter: screenSize=$screenSize, previewSize=$previewSize sensorOrientation=$sensorOrientation');
-    debugPrint('cameraAspect=$cameraAspect displayedSize=$displayedSize, offset=$offset');
+
+    debugPrint(
+      'OverlayPainter: screenSize=$screenSize, previewSize=$previewSize sensorOrientation=$sensorOrientation',
+    );
+    debugPrint(
+      'cameraAspect=$cameraAspect displayedSize=$displayedSize, offset=$offset',
+    );
 
     if (result.hand1.isDetected) {
-      debugPrint('Hand1 landmarks: ${result.hand1.landmarks.map((lm) => '(${lm.x.toStringAsFixed(2)}, ${lm.y.toStringAsFixed(2)})').take(5).join(', ')}...');
+      debugPrint(
+        'Hand1 landmarks: ${result.hand1.landmarks.map((lm) => '(${lm.x.toStringAsFixed(2)}, ${lm.y.toStringAsFixed(2)})').take(5).join(', ')}...',
+      );
       _drawHand(canvas, displayedSize, offset, result.hand1.landmarks, 0);
     }
     if (result.hand2.isDetected) {

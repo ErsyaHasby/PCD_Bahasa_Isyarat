@@ -1,38 +1,14 @@
 import '../models/inference_result.dart';
 import '../models/hand_data.dart';
+import 'onnx_inference_service.dart';
 
 class HandClassifier {
-  static const List<String> _labels = [
-    'A',
-    'B',
-    'C',
-    'D',
-    'E',
-    'F',
-    'G',
-    'H',
-    'I',
-    'J',
-    'K',
-    'L',
-    'M',
-    'N',
-    'O',
-    'P',
-    'Q',
-    'R',
-    'S',
-    'T',
-    'U',
-    'V',
-    'W',
-    'X',
-    'Y',
-    'Z',
-  ];
+  final OnnxInferenceService _onnxService = OnnxInferenceService();
+  bool _useOnnx = true;
 
-  int _labelIndex = 0;
-  int _lastSwitchMs = 0;
+  Future<void> initialize() async {
+    await _onnxService.initialize();
+  }
 
   InferenceResult classify({
     required HandData hand1,
@@ -40,30 +16,37 @@ class HandClassifier {
     required int handsDetected,
     int latencyMs = 0,
   }) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-
     if (handsDetected == 0) {
       return InferenceResult.empty;
     }
 
-    // Placeholder: cycling A-Z tiap 2 detik
-    // TODO: Integrasikan ONNX model (gesture_model.onnx) untuk inference nyata
-    // Model sudah tersedia di app/assets/models/gesture_model.onnx
-    // Labels sudah tersedia di app/assets/models/labels.json
-    if (now - _lastSwitchMs > 2000) {
-      _labelIndex = (_labelIndex + 1) % _labels.length;
-      _lastSwitchMs = now;
+    // Try ONNX inference first
+    if (_useOnnx) {
+      final result = _onnxService.classify(hand1, hand2);
+      if (result['label'] != null && result['label'].toString().isNotEmpty) {
+        return InferenceResult(
+          label: result['label'].toString(),
+          confidence: (result['confidence'] as num).toDouble(),
+          hand1: hand1,
+          hand2: hand2,
+          handsDetected: handsDetected,
+          latencyMs: latencyMs,
+        );
+      }
     }
 
-    final confidence = 0.85 + (now % 12) / 100;
-
+    // Fallback to placeholder if ONNX fails
     return InferenceResult(
-      label: _labels[_labelIndex],
-      confidence: confidence,
+      label: 'Unknown',
+      confidence: 0.0,
       hand1: hand1,
       hand2: hand2,
       handsDetected: handsDetected,
       latencyMs: latencyMs,
     );
+  }
+
+  void dispose() {
+    _onnxService.dispose();
   }
 }

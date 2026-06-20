@@ -25,26 +25,39 @@ class HandLandmarkDetector {
 
   Future<List<HandData>> processFrame(
     CameraImage image,
-    CameraDescription camera,
-  ) async {
+    CameraDescription camera, {
+    bool isFrontCamera = false,
+  }) async {
     if (_plugin == null || _isDetecting) return [];
     _isDetecting = true;
 
     try {
       // Validate image dimensions
       if (image.width == 0 || image.height == 0) {
-        debugPrint('Warning: Invalid image dimensions: ${image.width}x${image.height}');
+        debugPrint(
+          'Warning: Invalid image dimensions: ${image.width}x${image.height}',
+        );
         return [];
       }
 
-      final hands = _plugin!.detect(image, camera.sensorOrientation);
+      final hands = _plugin!.detect(image, 0);
 
       // Debug: log sensor orientation & hand count
-      debugPrint('HandDetect: sensorOrientation=${camera.sensorOrientation} hands=${hands.length}');
+      debugPrint(
+        'HandDetect: sensorOrientation=${camera.sensorOrientation} hands=${hands.length} isFrontCamera=$isFrontCamera',
+      );
 
       // Pass sensorOrientation so extraction can account for image rotation
       return hands
-          .map((hand) => _extractHandData(hand, image.width, image.height, camera.sensorOrientation))
+          .map(
+            (hand) => _extractHandData(
+              hand,
+              image.width,
+              image.height,
+              camera.sensorOrientation,
+              isFrontCamera: isFrontCamera,
+            ),
+          )
           .toList();
     } catch (e, stack) {
       debugPrint('HandLandmarkDetector process error: $e\n$stack');
@@ -54,7 +67,13 @@ class HandLandmarkDetector {
     }
   }
 
-  HandData _extractHandData(Hand hand, int imageWidth, int imageHeight, int sensorOrientation) {
+  HandData _extractHandData(
+    Hand hand,
+    int imageWidth,
+    int imageHeight,
+    int sensorOrientation, {
+    bool isFrontCamera = false,
+  }) {
     try {
       // MediaPipe outputs landmarks in the ORIGINAL (unrotated) image coordinate
       // space. The hand_landmarker plugin passes sensorOrientation as
@@ -63,7 +82,9 @@ class HandLandmarkDetector {
       // We must rotate them to display (portrait) space here.
       if (hand.landmarks.isNotEmpty) {
         final raw0 = hand.landmarks[0];
-        debugPrint('RawMediaPipe: first=(${raw0.x.toStringAsFixed(2)}, ${raw0.y.toStringAsFixed(2)}) dims=${imageWidth}x$imageHeight rot=$sensorOrientation');
+        debugPrint(
+          'RawMediaPipe: first=(${raw0.x.toStringAsFixed(2)}, ${raw0.y.toStringAsFixed(2)}) dims=${imageWidth}x$imageHeight rot=$sensorOrientation',
+        );
       }
 
       final landmarks = hand.landmarks.map((lm) {
@@ -76,17 +97,22 @@ class HandLandmarkDetector {
             dx = lm.x;
             dy = lm.y;
           case 90:
-            dx = 1.0 - lm.y;
-            dy = lm.x;
+            dx = lm.y;
+            dy = 1.0 - lm.x;
           case 180:
             dx = 1.0 - lm.x;
             dy = 1.0 - lm.y;
           case 270:
-            dx = lm.y;
-            dy = 1.0 - lm.x;
+            dx = 1.0 - lm.y;
+            dy = lm.x;
           default:
             dx = lm.x;
             dy = lm.y;
+        }
+
+        // Mirror for front camera
+        if (isFrontCamera) {
+          dx = 1.0 - dx;
         }
 
         return LandmarkPoint(x: dx, y: dy, z: lm.z);
@@ -99,13 +125,19 @@ class HandLandmarkDetector {
       }
 
       if (landmarks.length != HandData.landmarkCount) {
-        debugPrint('Warning: Expected ${HandData.landmarkCount} landmarks, got ${landmarks.length}');
+        debugPrint(
+          'Warning: Expected ${HandData.landmarkCount} landmarks, got ${landmarks.length}',
+        );
         // Pad or truncate to 21 landmarks
         final padded = List<LandmarkPoint>.filled(
           HandData.landmarkCount,
           LandmarkPoint.zero,
         );
-        for (int i = 0; i < landmarks.length && i < HandData.landmarkCount; i++) {
+        for (
+          int i = 0;
+          i < landmarks.length && i < HandData.landmarkCount;
+          i++
+        ) {
           padded[i] = landmarks[i];
         }
         return HandData(landmarks: padded, isDetected: true);

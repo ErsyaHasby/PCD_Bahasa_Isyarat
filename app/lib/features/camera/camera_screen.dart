@@ -1,4 +1,3 @@
-import 'dart:typed_data' show Uint8List;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,7 +6,9 @@ import 'package:vibration/vibration.dart';
 import 'package:camera/camera.dart';
 
 import '../../core/models/inference_result.dart';
-import '../../core/services/pcd_pipeline.dart';
+import '../../core/models/hand_data.dart';
+import '../../core/services/hand_landmark_detector.dart';
+import '../../core/services/hand_classifier.dart';
 import '../../core/services/tts_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/journal_repository.dart';
@@ -24,6 +25,8 @@ class _CameraScreenState extends State<CameraScreen>
   // ── Services ───────────────────────────────────────────────────────
   final _tts = TtsService();
   final _repo = JournalRepository();
+  final _detector = HandLandmarkDetector();
+  final _classifier = HandClassifier();
 
   // ── State ──────────────────────────────────────────────────────────
   InferenceResult _result = InferenceResult.empty;
@@ -52,12 +55,15 @@ class _CameraScreenState extends State<CameraScreen>
   int _lastLabelMs = 0;
   String _stableLabel = '';
   static const int _frameIntervalMs = 250;
+  int _sensorOrientation = 0;
 
   @override
   void initState() {
     super.initState();
     _setupAnimations();
     _tts.initialize();
+    _detector.initialize();
+    _classifier.initialize();
     _initRealCamera();
   }
 
@@ -94,7 +100,10 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       await _cameraCtrl!.initialize();
       if (!mounted) return;
-      setState(() => _isCameraReady = true);
+      setState(() {
+        _isCameraReady = true;
+        _sensorOrientation = target?.sensorOrientation ?? 0;
+      });
       await _startImageStream();
     } catch (e) {
       debugPrint('Camera set error: $e');
@@ -144,16 +153,27 @@ class _CameraScreenState extends State<CameraScreen>
     if (_isProcessing || !mounted) return;
     _isProcessing = true;
 
-    final bytes = _combinePlanes(image.planes);
-    final payload = IsolatePayload(
-      bytes: bytes,
-      width: image.width,
-      height: image.height,
+    // Detect landmarks using MediaPipe (Alex's pipeline)
+    final hands = await _detector.processFrame(
+      image,
+      _cameras.first,
       isFrontCamera: _isFrontCamera,
     );
 
-    // Jalankan PCD + Inference di background isolate via compute()
-    final result = await compute(runPcdPipeline, payload);
+    if (!mounted) {
+      _isProcessing = false;
+      return;
+    }
+
+    // Classify gesture (placeholder cycling A-Z)
+    final hand1 = hands.isNotEmpty ? hands[0] : HandData.empty;
+    final hand2 = hands.length > 1 ? hands[1] : HandData.empty;
+    final result = _classifier.classify(
+      hand1: hand1,
+      hand2: hand2,
+      handsDetected: hands.length,
+      latencyMs: DateTime.now().millisecondsSinceEpoch - _lastFrameMs,
+    );
 
     if (!mounted) {
       _isProcessing = false;
@@ -202,17 +222,6 @@ class _CameraScreenState extends State<CameraScreen>
       _tts.speak('Tangan terdeteksi. Siap meragakan isyarat.');
       Vibration.vibrate(duration: 150, amplitude: 255);
     }
-  }
-
-  Uint8List _combinePlanes(List<Plane> planes) {
-    final total = planes.fold<int>(0, (sum, p) => sum + p.bytes.length);
-    final combined = Uint8List(total);
-    var offset = 0;
-    for (final plane in planes) {
-      combined.setRange(offset, offset + plane.bytes.length, plane.bytes);
-      offset += plane.bytes.length;
-    }
-    return combined;
   }
 
   void _maybeUpdateTranslation(InferenceResult result) {
@@ -276,6 +285,8 @@ class _CameraScreenState extends State<CameraScreen>
     _cameraCtrl?.dispose();
     _textCtrl.dispose();
     _tts.dispose();
+    _detector.dispose();
+    _classifier.dispose();
     super.dispose();
   }
 
@@ -309,7 +320,13 @@ class _CameraScreenState extends State<CameraScreen>
             CustomPaint(
               painter: HandOverlayPainter(
                 result: _result,
-                previewSize: MediaQuery.of(context).size,
+                previewSize: Size(
+                  _cameraCtrl!.value.previewSize!.width.toDouble(),
+                  _cameraCtrl!.value.previewSize!.height.toDouble(),
+                ),
+                screenSize: MediaQuery.of(context).size,
+                isFrontCamera: _isFrontCamera,
+                sensorOrientation: _sensorOrientation,
               ),
             ),
 
@@ -360,8 +377,8 @@ class _CameraScreenState extends State<CameraScreen>
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: _result.latencyMs < 300 
-                                ? AppTheme.success 
+                            color: _result.latencyMs < 300
+                                ? AppTheme.success
                                 : AppTheme.warning,
                           ),
                         ),
