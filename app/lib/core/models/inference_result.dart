@@ -28,7 +28,7 @@ class InferenceResult {
     latencyMs: 0,
   );
 
-  bool get isConfident => confidence >= 0.75;
+  bool get isConfident => confidence >= 0.85;
   bool get handDetected => handsDetected > 0;
   bool get bothHandsDetected => handsDetected >= 2;
 

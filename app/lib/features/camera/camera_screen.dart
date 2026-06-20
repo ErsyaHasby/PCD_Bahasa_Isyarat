@@ -234,9 +234,16 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   void _maybeUpdateTranslation(InferenceResult result) {
-    if (!result.isConfident) return;
-
     final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    if (result.label.isEmpty || !result.isConfident) {
+      // Jika tidak pede, reset panel setelah delay kecil agar tidak berkedip
+      if (_translatedText.isNotEmpty && (nowMs - _lastLabelMs > 1500)) {
+        _updateTranslation('', 0.0);
+      }
+      return;
+    }
+
     final isNewLabel = result.label != _stableLabel;
     final isHoldExpired = nowMs - _lastLabelMs > 1200;
 

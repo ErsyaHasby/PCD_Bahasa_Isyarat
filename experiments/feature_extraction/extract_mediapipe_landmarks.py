@@ -121,21 +121,39 @@ def process_dataset():
 
         # Progress bar untuk inner loop (per gambar)
         for image_path in tqdm(image_files, desc=f"  {label}", leave=False):
-            # Extract landmarks
+            # Extract landmarks (Original Image)
             hands, hand_count = extract_landmarks_from_image(image_path)
 
-            # Skip jika tidak ada tangan terdeteksi
-            if hands is None or len(hands) == 0:
+            if hands is not None and len(hands) > 0:
+                features = extract_all(hands, use_z=True)
+                flattened = features['landmark_vector'].tolist()
+                data_rows.append([label] + flattened)
+            else:
                 missing_files.append(str(image_path))
-                continue
 
-            # Gunakan feature_extractor.py yang sudah sesuai PRD (126 features)
-            features = extract_all(hands, use_z=True)
-            flattened = features['landmark_vector'].tolist()
-
-            # Tambahkan label di depan
-            row = [label] + flattened
-            data_rows.append(row)
+            # DATA AUGMENTATION: Extract landmarks (Mirrored Image)
+            # Ini sangat penting untuk mengatasi kamera depan yang memantulkan gambar (Mirroring)
+            image = cv2.imread(str(image_path))
+            if image is not None:
+                image_flipped = cv2.flip(image, 1)
+                
+                # Convert BGR ke RGB untuk MediaPipe
+                image_rgb = cv2.cvtColor(image_flipped, cv2.COLOR_BGR2RGB)
+                with mp_hands.Hands(static_image_mode=True, max_num_hands=2, min_detection_confidence=0.5) as hands_processor:
+                    results = hands_processor.process(image_rgb)
+                    
+                if results.multi_hand_landmarks:
+                    hands_list = []
+                    for hand_landmarks in results.multi_hand_landmarks[:2]:
+                        landmarks = []
+                        for landmark in hand_landmarks.landmark:
+                            landmarks.append([landmark.x, landmark.y, landmark.z])
+                        hands_list.append(landmarks)
+                    
+                    features_flipped = extract_all(hands_list, use_z=True)
+                    flattened_flipped = features_flipped['landmark_vector'].tolist()
+                    # Simpan data yang di-flip sebagai label yang sama
+                    data_rows.append([label] + flattened_flipped)
 
     # Buat DataFrame dan simpan ke CSV
     print(f"\nMenyimpan {len(data_rows)} sampel ke {OUTPUT_CSV}")
