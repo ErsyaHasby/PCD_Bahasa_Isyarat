@@ -14,6 +14,15 @@ import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
 import os
+import sys
+import importlib.util
+
+# Load feature_extractor.py directly by path to avoid collision with official 'mediapipe' package
+feat_ext_path = Path(__file__).parent.parent / "mediapipe" / "feature_extractor.py"
+spec = importlib.util.spec_from_file_location("feature_extractor", feat_ext_path)
+feature_extractor = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(feature_extractor)
+extract_all = feature_extractor.extract_all
 
 # Import MediaPipe dengan cara yang kompatibel untuk versi terbaru
 try:
@@ -69,68 +78,18 @@ def extract_landmarks_from_image(image_path: str):
     if not results.multi_hand_landmarks:
         return None, 0
 
-    # Ambil landmarks dari tangan pertama (dominant hand)
-    # Untuk MVP, kita fokus pada 1 tangan dulu
-    hand_landmarks = results.multi_hand_landmarks[0]
+    # Extract up to 2 hands
+    hands_list = []
+    for hand_landmarks in results.multi_hand_landmarks[:2]:
+        landmarks = []
+        for landmark in hand_landmarks.landmark:
+            landmarks.append([landmark.x, landmark.y, landmark.z])
+        hands_list.append(landmarks)
 
-    # Extract 21 landmarks
-    landmarks = []
-    for landmark in hand_landmarks.landmark:
-        landmarks.append([landmark.x, landmark.y, landmark.z])
-
-    return np.array(landmarks), len(results.multi_hand_landmarks)
-
-
-def normalize_landmarks(landmarks: np.ndarray):
-    """
-    Normalisasi landmarks sesuai PRD Section 8.2:
-    - Titik acuan: wrist (landmark 0)
-    - Skala: jarak wrist ke middle finger MCP (landmark 9)
-    - Normalisasi: (x, y, z) relatif terhadap wrist dan dibagi skala
-
-    Args:
-        landmarks: numpy array (21, 3) berisi [x, y, z] raw dari MediaPipe
-
-    Returns:
-        normalized: numpy array (21, 3) berisi [x, y, z] ternormalisasi
-    """
-    # Wrist adalah landmark 0
-    wrist = landmarks[0]
-
-    # Middle finger MCP adalah landmark 9
-    middle_mcp = landmarks[9]
-
-    # Hitung skala: jarak Euclidean wrist ke middle finger MCP
-    # Ini merepresentasikan ukuran tangan untuk normalisasi
-    scale = np.sqrt(
-        (middle_mcp[0] - wrist[0]) ** 2
-        + (middle_mcp[1] - wrist[1]) ** 2
-        + (middle_mcp[2] - wrist[2]) ** 2
-    )
-
-    # Avoid division by zero
-    if scale == 0:
-        scale = 1.0
-
-    # Normalisasi: (landmark - wrist) / scale
-    # Ini membuat posisi relatif terhadap wrist dan dinormalisasi oleh ukuran tangan
-    normalized = (landmarks - wrist) / scale
-
-    return normalized
+    return hands_list, len(results.multi_hand_landmarks)
 
 
-def flatten_landmarks(landmarks: np.ndarray):
-    """
-    Flatten array (21, 3) menjadi vektor 63 nilai.
-    Format: [x0, y0, z0, x1, y1, z1, ..., x20, y20, z20]
-
-    Args:
-        landmarks: numpy array (21, 3) ternormalisasi
-
-    Returns:
-        flattened: list 63 nilai
-    """
-    return landmarks.flatten().tolist()
+    pass
 
 
 def process_dataset():
@@ -163,18 +122,16 @@ def process_dataset():
         # Progress bar untuk inner loop (per gambar)
         for image_path in tqdm(image_files, desc=f"  {label}", leave=False):
             # Extract landmarks
-            landmarks, hand_count = extract_landmarks_from_image(image_path)
+            hands, hand_count = extract_landmarks_from_image(image_path)
 
             # Skip jika tidak ada tangan terdeteksi
-            if landmarks is None:
+            if hands is None or len(hands) == 0:
                 missing_files.append(str(image_path))
                 continue
 
-            # Normalisasi landmarks
-            normalized = normalize_landmarks(landmarks)
-
-            # Flatten ke 63 nilai
-            flattened = flatten_landmarks(normalized)
+            # Gunakan feature_extractor.py yang sudah sesuai PRD (126 features)
+            features = extract_all(hands, use_z=True)
+            flattened = features['landmark_vector'].tolist()
 
             # Tambahkan label di depan
             row = [label] + flattened
@@ -183,9 +140,9 @@ def process_dataset():
     # Buat DataFrame dan simpan ke CSV
     print(f"\nMenyimpan {len(data_rows)} sampel ke {OUTPUT_CSV}")
 
-    # Buat header: label, x0, y0, z0, ..., x20, y20, z20
+    # Buat header: label, x0, y0, z0, ..., x41, y41, z41
     header = ["label"]
-    for i in range(21):
+    for i in range(42):
         header.extend([f"x{i}", f"y{i}", f"z{i}"])
 
     df = pd.DataFrame(data_rows, columns=header)

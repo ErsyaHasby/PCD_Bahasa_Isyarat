@@ -1,8 +1,8 @@
 {
   "model_type": "SVM",
-  "n_support": 2462,
+  "n_support": 2136,
   "n_classes": 26,
-  "n_features": 63,
+  "n_features": 126,
   "gamma": "scale",
   "C": 10,
   "classes": [

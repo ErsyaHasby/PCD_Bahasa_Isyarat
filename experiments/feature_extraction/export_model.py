@@ -44,8 +44,8 @@ def export_to_onnx(model, label_encoder, output_path):
 
     print("Exporting model to ONNX...")
 
-    # Tentukan input type (63 features)
-    initial_type = [("float_input", FloatTensorType([None, 63]))]
+    # Tentukan input type (126 features)
+    initial_type = [("float_input", FloatTensorType([None, 126]))]
 
     # Convert model ke ONNX
     onnx_model = convert_sklearn(model, initial_types=initial_type, target_opset=12)

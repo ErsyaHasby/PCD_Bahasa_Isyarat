@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import '../models/inference_result.dart';
 import '../models/hand_data.dart';
 import 'onnx_inference_service.dart';
@@ -6,8 +7,8 @@ class HandClassifier {
   final OnnxInferenceService _onnxService = OnnxInferenceService();
   bool _useOnnx = true;
 
-  Future<void> initialize() async {
-    await _onnxService.initialize();
+  Future<void> initialize({Uint8List? modelBytes, String? labelsJson}) async {
+    await _onnxService.initialize(modelBytes: modelBytes, labelsJson: labelsJson);
   }
 
   InferenceResult classify({

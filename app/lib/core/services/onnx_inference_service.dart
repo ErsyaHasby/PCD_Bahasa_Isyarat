@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:onnxruntime/onnxruntime.dart';
 import '../models/hand_data.dart';
+import 'hand_feature_extractor.dart';
 
 class OnnxInferenceService {
   OrtSession? _session;
@@ -10,18 +11,28 @@ class OnnxInferenceService {
   List<String> _labels = [];
   String? _inputName;
   bool _initialized = false;
+  final HandFeatureExtractor _featureExtractor = HandFeatureExtractor();
 
-  Future<void> initialize() async {
+  Future<void> initialize({Uint8List? modelBytes, String? labelsJson}) async {
     if (_initialized) return;
 
     try {
-      // Load model from assets
-      final modelBytes = await rootBundle.load('assets/models/gesture_model.onnx');
-      final modelData = modelBytes.buffer.asUint8List();
+      // Use provided bytes or load from assets
+      Uint8List modelData;
+      if (modelBytes != null) {
+        modelData = modelBytes;
+      } else {
+        final bytes = await rootBundle.load('assets/models/gesture_model.onnx');
+        modelData = bytes.buffer.asUint8List();
+      }
 
       // Load labels
-      final labelsJson = await rootBundle.loadString('assets/models/labels.json');
-      _labels = (await _parseLabels(labelsJson));
+      if (labelsJson != null) {
+        _labels = await _parseLabels(labelsJson);
+      } else {
+        final json = await rootBundle.loadString('assets/models/labels.json');
+        _labels = await _parseLabels(json);
+      }
 
       // Create ONNX session options
       _sessionOptions = OrtSessionOptions();
@@ -69,8 +80,8 @@ class OnnxInferenceService {
 
     try {
       // Convert HandData to input tensor
-      // Based on svm_params.json: 63 features (21 landmarks x 3 for 1 hand)
-      final input = _prepareInputTensor(hand1);
+      // Based on PRD: 126 features (21 landmarks x 3 for 2 hands)
+      final input = _prepareInputTensor(hand1, hand2);
       print('ONNX: Input tensor prepared, length=${input.length}');
       print('ONNX: First 5 input values: ${input.take(5).map((e) => e.toStringAsFixed(2)).join(', ')}');
       print('ONNX: Last 5 input values: ${input.skip(input.length - 5).map((e) => e.toStringAsFixed(2)).join(', ')}');
@@ -78,7 +89,7 @@ class OnnxInferenceService {
       // Create input tensor
       final inputOrt = OrtValueTensor.createTensorWithDataList(
         Float32List.fromList(input),
-        [1, 63],
+        [1, 126],
       );
 
       // Run inference
@@ -134,15 +145,11 @@ class OnnxInferenceService {
     }
   }
 
-  List<double> _prepareInputTensor(HandData hand) {
-    // Flatten 21 landmarks x 3 (x, y, z) = 63 features
-    final features = <double>[];
-    for (final landmark in hand.landmarks) {
-      features.add(landmark.x);
-      features.add(landmark.y);
-      features.add(landmark.z);
-    }
-    return features;
+  List<double> _prepareInputTensor(HandData hand1, HandData hand2) {
+    // 1. Normalize hands using HandFeatureExtractor
+    final normalizedHands = _featureExtractor.normalize([hand1, hand2]);
+    // 2. Flatten to 126 features (2 hands x 21 landmarks x 3)
+    return _featureExtractor.flatten(normalizedHands, useZ: true);
   }
 
   int _argMax(List<double> list) {

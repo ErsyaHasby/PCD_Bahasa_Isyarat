@@ -44,6 +44,10 @@ class _CameraScreenState extends State<CameraScreen>
   bool _handReadyNotified = false;
   int _lastHandsCount = 0;
 
+  // ── Asset Cache untuk Isolate ──────────────────────────────────────
+  Uint8List? _modelBytes;
+  String? _labelsJson;
+
   // ── Animations ─────────────────────────────────────────────────────
   late AnimationController _textCtrl;
   late Animation<Offset> _textSlide;
@@ -64,7 +68,18 @@ class _CameraScreenState extends State<CameraScreen>
     _tts.initialize();
     _detector.initialize();
     _classifier.initialize();
+    _preloadAssets();
     _initRealCamera();
+  }
+
+  Future<void> _preloadAssets() async {
+    try {
+      final bytes = await rootBundle.load('assets/models/gesture_model.onnx');
+      _modelBytes = bytes.buffer.asUint8List();
+      _labelsJson = await rootBundle.loadString('assets/models/labels.json');
+    } catch (e) {
+      debugPrint('Failed to preload ONNX assets: $e');
+    }
   }
 
   Future<void> _initRealCamera() async {
@@ -165,15 +180,25 @@ class _CameraScreenState extends State<CameraScreen>
       return;
     }
 
-    // Classify gesture (placeholder cycling A-Z)
+    // Classify gesture using compute (Priority 4)
     final hand1 = hands.isNotEmpty ? hands[0] : HandData.empty;
     final hand2 = hands.length > 1 ? hands[1] : HandData.empty;
-    final result = _classifier.classify(
-      hand1: hand1,
-      hand2: hand2,
-      handsDetected: hands.length,
-      latencyMs: DateTime.now().millisecondsSinceEpoch - _lastFrameMs,
-    );
+
+    InferenceResult result;
+    if (hands.isEmpty) {
+      result = InferenceResult.empty;
+    } else {
+      final token = RootIsolateToken.instance!;
+      result = await compute(_processFrameIsolate, {
+        'token': token,
+        'hand1': hand1,
+        'hand2': hand2,
+        'handsDetected': hands.length,
+        'latencyMs': DateTime.now().millisecondsSinceEpoch - _lastFrameMs,
+        'modelBytes': _modelBytes,
+        'labelsJson': _labelsJson,
+      });
+    }
 
     if (!mounted) {
       _isProcessing = false;
@@ -191,6 +216,33 @@ class _CameraScreenState extends State<CameraScreen>
     }
 
     _isProcessing = false;
+  }
+
+  /// Static function untuk dijalankan di background isolate menggunakan compute()
+  static Future<InferenceResult> _processFrameIsolate(Map<String, dynamic> args) async {
+    final token = args['token'] as RootIsolateToken;
+    BackgroundIsolateBinaryMessenger.ensureInitialized(token);
+
+    final hand1 = args['hand1'] as HandData;
+    final hand2 = args['hand2'] as HandData;
+    final handsDetected = args['handsDetected'] as int;
+    final latencyMs = args['latencyMs'] as int;
+    final modelBytes = args['modelBytes'] as Uint8List?;
+    final labelsJson = args['labelsJson'] as String?;
+
+    // Inisialisasi classifier di dalam isolate menggunakan byte cache
+    final classifier = HandClassifier();
+    await classifier.initialize(modelBytes: modelBytes, labelsJson: labelsJson);
+
+    final result = classifier.classify(
+      hand1: hand1,
+      hand2: hand2,
+      handsDetected: handsDetected,
+      latencyMs: latencyMs,
+    );
+
+    classifier.dispose();
+    return result;
   }
 
   void _checkHandsDetection(InferenceResult result) {
