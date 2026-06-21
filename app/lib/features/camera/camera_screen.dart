@@ -467,14 +467,14 @@ class _CameraScreenState extends State<CameraScreen>
             ),
 
           // ── Translation panel (bottom) ──────────────────────────────
-          if (_bothHandsDetected)
+          if (_bothHandsDetected || _phraseBuffer.isNotEmpty)
             Align(
               alignment: Alignment.bottomCenter,
               child: _buildTranslationPanel(),
             ),
 
           // ── Hand detection awaiting ─────────────────────────────────
-          if (!_bothHandsDetected && _isCameraReady)
+          if (!_bothHandsDetected && _phraseBuffer.isEmpty && _isCameraReady)
             Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
