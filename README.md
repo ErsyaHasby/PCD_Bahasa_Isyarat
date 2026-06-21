@@ -284,16 +284,15 @@ PCD_Bahasa_Isyarat/
 
 <div align="center">
 
-| No | Nama | NIM | Peran |
-|:---:|---|---|---|
-| 1 | **Ersya Hasby** | — | Project Lead / Mobile Developer |
-| 2 | **Anggota 2** | — | ML Engineer / Data Scientist |
-| 3 | **Anggota 3** | — | UI/UX Designer |
-| 4 | **Anggota 4** | — | Quality Assurance |
+| No | Nama | Peran |
+|:---:|---|---|
+| 1 | **Ersya Hasby Satria (072)** | Camera + Pre-Processing (PCD) + Performance Optimization |
+| 2 | **Alexandrio Vega Bonito (067)** | MediaPipe Integration + Feature Extraction |
+| 3 | **Muhammad Brata Hadinata (082)** | Machine Learning Training (Sklearn) + Model Export + Inference + Integrasi Keseluruhan & Problem Solving |
+| 4 | **Varian Abidarma Syuhada (091)** | UI/UX + History/Local DB + Hasil Integrasi |
 
 </div>
 
-> **Catatan:** Silakan perbarui tabel di atas dengan nama lengkap, NIM, dan peran masing-masing anggota tim.
 
 ---
 
