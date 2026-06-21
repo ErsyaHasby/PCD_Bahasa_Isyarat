@@ -106,7 +106,21 @@ class _CameraScreenState extends State<CameraScreen>
       target = _cameras.first;
     }
 
-    final oldCtrl = _cameraCtrl;
+    // 1 & 2. Stop stream and dispose OLD controller safely FIRST
+    if (_cameraCtrl != null) {
+      try {
+        if (_isStreaming || _cameraCtrl!.value.isStreamingImages) {
+          await _cameraCtrl!.stopImageStream();
+        }
+      } catch (_) {}
+      try {
+        await _cameraCtrl!.dispose();
+      } catch (_) {}
+      _cameraCtrl = null;
+      _isStreaming = false;
+    }
+
+    // 3 & 4. Initialize NEW controller
     _cameraCtrl = CameraController(
       target,
       ResolutionPreset.medium,
@@ -116,22 +130,19 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       await _cameraCtrl!.initialize();
       if (!mounted) return;
+      
       setState(() {
         _isCameraReady = true;
         _sensorOrientation = target?.sensorOrientation ?? 0;
       });
+      
+      // 5. Restart Stream
       await _startImageStream();
     } catch (e) {
       debugPrint('Camera set error: $e');
-    }
-
-    if (oldCtrl != null) {
-      try {
-        if (oldCtrl.value.isStreamingImages) {
-          await oldCtrl.stopImageStream();
-        }
-      } catch (_) {}
-      await oldCtrl.dispose();
+      if (mounted) {
+        setState(() => _isCameraReady = false);
+      }
     }
   }
 
@@ -327,12 +338,18 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  void _toggleCamera() {
-    setState(() => _isFrontCamera = !_isFrontCamera);
-    _setCamera(
+  Future<void> _toggleCamera() async {
+    if (!_isCameraReady) return;
+
+    setState(() {
+      _isCameraReady = false; // Memunculkan loading overlay
+      _isFrontCamera = !_isFrontCamera;
+    });
+    HapticFeedback.lightImpact();
+
+    await _setCamera(
       _isFrontCamera ? CameraLensDirection.front : CameraLensDirection.back,
     );
-    HapticFeedback.lightImpact();
   }
 
   void _toggleTts() {
@@ -619,28 +636,31 @@ class _CameraScreenState extends State<CameraScreen>
                   ],
 
                   Expanded(
-                    child: isDetecting
-                        ? Text(
-                            'Menahan "$_detectingLabel"...',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: AppTheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        : (_phraseBuffer.isNotEmpty
-                            ? Text(
-                                'Sesi aktif. Lanjutkan...',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: AppTheme.textHint,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              )
-                            : const SizedBox.shrink()),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 12.0),
+                      child: isDetecting
+                          ? Text(
+                              '"$_detectingLabel"...',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : (_phraseBuffer.isNotEmpty
+                              ? Text(
+                                  'Sesi aktif. Lanjutkan...',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppTheme.textHint,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                )
+                              : const SizedBox.shrink()),
+                    ),
                   ),
 
                   // Tombol UI
@@ -648,16 +668,16 @@ class _CameraScreenState extends State<CameraScreen>
                     IconButton(
                       icon: const Icon(Icons.backspace_rounded, size: 20),
                       color: AppTheme.textSecondary,
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.all(4),
                       constraints: const BoxConstraints(),
                       onPressed: _backspace,
                       tooltip: 'Hapus',
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     IconButton(
                       icon: const Icon(Icons.space_bar_rounded, size: 20),
                       color: AppTheme.textSecondary,
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.all(4),
                       constraints: const BoxConstraints(),
                       onPressed: _addSpace,
                       tooltip: 'Spasi',

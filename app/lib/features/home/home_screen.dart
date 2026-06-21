@@ -136,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen>
         )),
         const SizedBox(width: 12),
         Expanded(child: _StatCard(
-          label: 'Akurasi', value: '85%', icon: '🎯',
+          label: 'Akurasi', value: ' 95.7%', icon: '🎯',
           color: AppTheme.success,
         )),
       ],
