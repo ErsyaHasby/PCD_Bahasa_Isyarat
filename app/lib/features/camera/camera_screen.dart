@@ -606,8 +606,8 @@ class _CameraScreenState extends State<CameraScreen>
                   // Progress indicator untuk mendeteksi
                   if (isDetecting) ...[
                     SizedBox(
-                      width: 24,
-                      height: 24,
+                      width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(
                         value: holdProgress,
                         color: AppTheme.primary,
@@ -616,48 +616,61 @@ class _CameraScreenState extends State<CameraScreen>
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      'Menahan "$_detectingLabel"...',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ] else if (_phraseBuffer.isNotEmpty) ...[
-                    // Tampilkan indikator idle jika sedang tidak ada gestur
-                    Text(
-                      'Sesi aktif. Lanjutkan...',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppTheme.textHint,
-                      ),
-                    ),
                   ],
 
-                  const Spacer(),
+                  Expanded(
+                    child: isDetecting
+                        ? Text(
+                            'Menahan "$_detectingLabel"...',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : (_phraseBuffer.isNotEmpty
+                            ? Text(
+                                'Sesi aktif. Lanjutkan...',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppTheme.textHint,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : const SizedBox.shrink()),
+                  ),
 
                   // Tombol UI
                   if (_phraseBuffer.isNotEmpty) ...[
                     IconButton(
                       icon: const Icon(Icons.backspace_rounded, size: 20),
                       color: AppTheme.textSecondary,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      constraints: const BoxConstraints(),
                       onPressed: _backspace,
                       tooltip: 'Hapus',
                     ),
+                    const SizedBox(width: 8),
                     IconButton(
                       icon: const Icon(Icons.space_bar_rounded, size: 20),
                       color: AppTheme.textSecondary,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      constraints: const BoxConstraints(),
                       onPressed: _addSpace,
                       tooltip: 'Spasi',
                     ),
+                    const SizedBox(width: 12),
                     ElevatedButton.icon(
                       icon: const Icon(Icons.save_rounded, size: 16),
                       label: const Text('Simpan'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primary,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                        minimumSize: const Size(0, 36),
                       ),
                       onPressed: _saveSession,
                     ),
