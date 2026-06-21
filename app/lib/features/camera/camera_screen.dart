@@ -30,7 +30,11 @@ class _CameraScreenState extends State<CameraScreen>
 
   // ── State ──────────────────────────────────────────────────────────
   InferenceResult _result = InferenceResult.empty;
-  String _translatedText = '';
+  String _phraseBuffer = ''; // The full sentence being built
+  String _detectingLabel = ''; // The current letter being hovered
+  int _detectingStartMs = 0; // When the current hover started
+  String _lastRegisteredLabel = ''; // To prevent registering the same letter repeatedly
+  
   CameraController? _cameraCtrl;
   List<CameraDescription> _cameras = [];
   bool _isCameraReady = false;
@@ -55,8 +59,6 @@ class _CameraScreenState extends State<CameraScreen>
 
   // ── Camera stream control ─────────────────────────────────────────
   bool _isStreaming = false;
-  int _lastLabelMs = 0;
-  String _stableLabel = '';
   int _sensorOrientation = 0;
 
   @override
@@ -214,7 +216,8 @@ class _CameraScreenState extends State<CameraScreen>
     } else if (handsCount < 1 && _bothHandsDetected) {
       setState(() {
         _bothHandsDetected = false;
-        _translatedText = '';
+        _detectingLabel = ''; // Reset detecting state
+        _lastRegisteredLabel = ''; // Reset cooldown so they can re-register later
       });
       _handReadyNotified = false;
     }
@@ -236,45 +239,92 @@ class _CameraScreenState extends State<CameraScreen>
   void _maybeUpdateTranslation(InferenceResult result) {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
+    // Jika hasil tidak valid, reset state pendeteksian
     if (result.label.isEmpty || !result.isConfident) {
-      // Jika tidak pede, reset panel setelah delay kecil agar tidak berkedip
-      if (_translatedText.isNotEmpty && (nowMs - _lastLabelMs > 1500)) {
-        _updateTranslation('', 0.0);
+      if (_detectingLabel.isNotEmpty) {
+        setState(() {
+          _detectingLabel = '';
+          _lastRegisteredLabel = '';
+        });
       }
       return;
     }
 
-    final isNewLabel = result.label != _stableLabel;
-    final isHoldExpired = nowMs - _lastLabelMs > 1200;
+    final currentLabel = result.label;
 
-    if (isNewLabel || isHoldExpired) {
-      _stableLabel = result.label;
-      _lastLabelMs = nowMs;
-      if (result.label != _translatedText) {
-        _updateTranslation(result.label, result.confidence);
+    // Jika label berubah dari yang sedang dideteksi
+    if (currentLabel != _detectingLabel) {
+      setState(() {
+        _detectingLabel = currentLabel;
+        _detectingStartMs = nowMs;
+      });
+      return;
+    }
+
+    // Jika label sama dengan yang sedang dideteksi dan belum masuk cooldown (belum terdaftar)
+    if (currentLabel != _lastRegisteredLabel) {
+      final holdDuration = nowMs - _detectingStartMs;
+
+      // Render progress bar secara halus dengan memanggil setState
+      setState(() {});
+
+      // Jika sudah ditahan selama 2 detik
+      if (holdDuration >= 2000) {
+        _registerLetter(currentLabel);
       }
     }
   }
 
-  void _updateTranslation(String text, double confidence) {
-    setState(() => _translatedText = text);
+  void _registerLetter(String letter) {
+    setState(() {
+      _phraseBuffer += letter;
+      _lastRegisteredLabel = letter;
+      _detectingLabel = ''; // Reset visual progress bar
+    });
+    
     _textCtrl.forward(from: 0);
 
-    // TTS output
-    if (_isTtsEnabled && text != _lastSpokenText) {
-      _tts.speak(text);
-      _lastSpokenText = text;
+    if (_isTtsEnabled) {
+      _tts.speak(letter);
     }
-
-    // Haptic feedback
     Vibration.vibrate(duration: 80, amplitude: 128);
+  }
+
+  void _saveSession() {
+    if (_phraseBuffer.isEmpty) return;
+    
+    if (_isTtsEnabled) {
+      _tts.speak(_phraseBuffer);
+    }
 
     // Simpan ke jurnal (Hive)
     _repo.saveEntry(
-      translatedText: text,
-      confidenceScore: confidence,
-      gestureLabel: _result.label,
+      translatedText: _phraseBuffer,
+      confidenceScore: 1.0, // Assumed confident since user verified it
+      gestureLabel: 'Session',
     );
+
+    setState(() {
+      _phraseBuffer = '';
+      _detectingLabel = '';
+      _lastRegisteredLabel = '';
+    });
+  }
+
+  void _addSpace() {
+    setState(() {
+      _phraseBuffer += ' ';
+      _lastRegisteredLabel = ''; // reset cooldown
+    });
+  }
+
+  void _backspace() {
+    if (_phraseBuffer.isNotEmpty) {
+      setState(() {
+        _phraseBuffer = _phraseBuffer.substring(0, _phraseBuffer.length - 1);
+        _lastRegisteredLabel = ''; // reset cooldown
+      });
+    }
   }
 
   void _toggleCamera() {
@@ -501,6 +551,12 @@ class _CameraScreenState extends State<CameraScreen>
 
   // ── Translation Panel ─────────────────────────────────────────────────
   Widget _buildTranslationPanel() {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final isDetecting = _detectingLabel.isNotEmpty && _detectingLabel != _lastRegisteredLabel;
+    final holdProgress = isDetecting 
+        ? ((nowMs - _detectingStartMs) / 2000.0).clamp(0.0, 1.0)
+        : 0.0;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       child: ClipRRect(
@@ -512,44 +568,104 @@ class _CameraScreenState extends State<CameraScreen>
             color: AppTheme.surface.withOpacity(0.95),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _translatedText.isNotEmpty
+              color: _phraseBuffer.isNotEmpty || isDetecting
                   ? AppTheme.primary.withOpacity(0.4)
                   : AppTheme.divider,
               width: 2,
             ),
           ),
-          child: _translatedText.isEmpty
-              ? Text(
-                  'Mulai ragakan isyarat...',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: AppTheme.textHint,
-                    fontStyle: FontStyle.italic,
-                  ),
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SlideTransition(
-                      position: _textSlide,
-                      child: FadeTransition(
-                        opacity: _textFade,
-                        child: Text(
-                          _translatedText,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Teks Sesi Utuh
+              _phraseBuffer.isEmpty
+                  ? Text(
+                      'Mulai ragakan isyarat...',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: AppTheme.textHint,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    )
+                  : Text(
+                      _phraseBuffer,
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.5,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    _ConfidenceBar(confidence: _result.confidence),
+              
+              const SizedBox(height: 16),
+
+              // Indikator Hold & Kontrol UI
+              Row(
+                children: [
+                  // Progress indicator untuk mendeteksi
+                  if (isDetecting) ...[
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        value: holdProgress,
+                        color: AppTheme.primary,
+                        backgroundColor: AppTheme.divider,
+                        strokeWidth: 3,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Menahan "$_detectingLabel"...',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ] else if (_phraseBuffer.isNotEmpty) ...[
+                    // Tampilkan indikator idle jika sedang tidak ada gestur
+                    Text(
+                      'Sesi aktif. Lanjutkan...',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppTheme.textHint,
+                      ),
+                    ),
                   ],
-                ),
+
+                  const Spacer(),
+
+                  // Tombol UI
+                  if (_phraseBuffer.isNotEmpty) ...[
+                    IconButton(
+                      icon: const Icon(Icons.backspace_rounded, size: 20),
+                      color: AppTheme.textSecondary,
+                      onPressed: _backspace,
+                      tooltip: 'Hapus',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.space_bar_rounded, size: 20),
+                      color: AppTheme.textSecondary,
+                      onPressed: _addSpace,
+                      tooltip: 'Spasi',
+                    ),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.save_rounded, size: 16),
+                      label: const Text('Simpan'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      onPressed: _saveSession,
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
