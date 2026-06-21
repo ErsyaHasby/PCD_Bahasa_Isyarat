@@ -1,339 +1,312 @@
-# 🤟 Sistem Intelijen Visual Penerjemah Bahasa Isyarat Real-Time
-
 <div align="center">
 
-![Banner](docs/assets/banner.png)
+# 🤟 IsyaratAI
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter)](https://flutter.dev)
-[![TFLite](https://img.shields.io/badge/TFLite-Inference-FF6F00?style=for-the-badge&logo=tensorflow)](https://www.tensorflow.org/lite)
-[![MediaPipe](https://img.shields.io/badge/MediaPipe-Hand%20Tracking-4285F4?style=for-the-badge&logo=google)](https://mediapipe.dev)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Cloud%20Sync-47A248?style=for-the-badge&logo=mongodb)](https://www.mongodb.com)
+### Sistem Intelijen Visual Penerjemah Bahasa Isyarat BISINDO Real-Time
 
-**Tugas Besar — Pengolahan Citra Digital**  
-Program Studi D3 Teknik Informatika | Politeknik Negeri Bandung  
-Tahun Akademik 2025/2026
+[![Flutter](https://img.shields.io/badge/Flutter-3.10+-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
+[![MediaPipe](https://img.shields.io/badge/MediaPipe-Hands-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://mediapipe.dev)
+[![ONNX](https://img.shields.io/badge/ONNX-Runtime-7B68EE?style=for-the-badge&logo=onnx&logoColor=white)](https://onnxruntime.ai)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+
+---
+
+Aplikasi mobile berbasis **AI** yang menerjemahkan gestur **Bahasa Isyarat Indonesia (BISINDO)** alfabet **A–Z** menjadi teks secara *real-time* menggunakan kamera perangkat. Dibangun dengan arsitektur *on-device inference* untuk performa rendah latensi tanpa memerlukan koneksi internet.
+
+**Kelompok 2 — Pengolahan Citra Digital 2025/2026**
+**Politeknik Negeri Bandung (POLBAN)**
 
 </div>
 
 ---
 
-## 👥 Tim Pengembang — Kelompok 2
+## 📸 Tangkapan Layar
 
-| No | Nama | NIM |
-|:--:|------|:---:|
-| 1 | Alexandrio Vega Bonito | 241511067 |
-| 2 | Ersya Hasby Satria | 241511072 |
-| 3 | Muhammad Brata Hadinata | 241511082 |
-| 4 | Varian Abidarma Syuhada | 241511081 |
+> *Tangkapan layar akan segera ditambahkan.*
 
----
+<!--
+Uncomment dan ganti path gambar setelah screenshot tersedia:
 
-## 📋 Daftar Isi
-
-- [Latar Belakang & Masalah](#-latar-belakang--masalah)
-- [Solusi yang Diusulkan](#-solusi-yang-diusulkan)
-- [Inheritance dari Proyek Sebelumnya](#-inheritance-dari-proyek-sebelumnya)
-- [Pipeline PCD & ML](#-pipeline-pcd--ml)
-- [Arsitektur Sistem](#-arsitektur-sistem)
-- [Struktur Proyek](#-struktur-proyek)
-- [Cara Menjalankan](#-cara-menjalankan)
+<div align="center">
+  <img src="docs/screenshots/home.png" width="200" alt="Home Screen"/>
+  <img src="docs/screenshots/camera.png" width="200" alt="Camera AI"/>
+  <img src="docs/screenshots/detection.png" width="200" alt="Detection"/>
+  <img src="docs/screenshots/history.png" width="200" alt="History"/>
+</div>
+-->
 
 ---
 
-## 🧩 Bagian 1: Ideation & Problem-Solution Fit
+## ✨ Fitur Utama (Key Features)
 
-### 🌐 Domain & Masalah
+### 🎯 Deteksi Bahasa Isyarat Real-Time
+- Deteksi gestur tangan statis **alfabet A–Z BISINDO** secara langsung melalui kamera.
+- Mendukung deteksi **satu tangan** (huruf C, E, I, J, L, O, R, U, V, Z) maupun **dua tangan** (huruf A, B, D, F, G, H, K, M, N, P, Q, S, T, W, X, Y).
+- Target latensi inferensi **< 200–300ms** per frame.
 
-| Aspek | Detail |
-|-------|--------|
-| **Domain** | Aksesibilitas / Komunikasi Sosial |
-| **Target Pengguna** | Teman Tuli (pengguna Bahasa Isyarat Indonesia / BISINDO) & masyarakat umum |
-| **Masalah Utama** | Keterbatasan komunikasi dua arah antara pengguna bahasa isyarat dengan masyarakat yang tidak memahami isyarat |
+### 🦴 Skeleton Tracking (Hand Landmark Visualization)
+- Menampilkan **overlay kerangka tangan (skeleton)** 21 titik landmark secara real-time di atas preview kamera.
+- Visualisasi titik sendi dan garis penghubung antar jari dengan warna dinamis.
 
-### 😤 Problem Statement
+### ✍️ Session-Based Translation (Merangkai Kata/Kalimat)
+- Fitur **Hold-to-Register (2 detik)**: Huruf hanya terdaftar jika gestur ditahan secara konstan selama 2 detik, memfilter gestur transisi yang tidak disengaja.
+- Circular Progress Indicator sebagai umpan balik visual saat menahan gestur.
+- Tombol **Spasi**, **Backspace**, dan **Simpan** untuk merangkai dan mengedit kalimat langsung di layar kamera.
+- Panel translasi bersifat **persisten** — tetap tampil meskipun tangan keluar dari frame kamera.
 
-> Teman Tuli menghadapi kesulitan komunikasi yang signifikan dalam interaksi sehari-hari karena tidak semua orang memahami bahasa isyarat. Mencari penerjemah manusia secara spontan hampir mustahil dilakukan, sehingga menghambat kemandirian dan inklusi sosial mereka.
+### 🔊 Text-to-Speech (TTS)
+- Integrasi **Google Text-to-Speech** untuk membacakan huruf yang terdeteksi secara otomatis (jika diaktifkan).
+- Tombol **Putar Suara** di halaman Detail Riwayat untuk membacakan ulang kalimat yang tersimpan.
+- Toggle speaker on/off langsung dari layar kamera.
 
-### ✅ Solusi yang Diusulkan
+### 📒 Riwayat & Jurnal Terjemahan
+- Penyimpanan sesi terjemahan ke **database lokal (Hive)** berbasis sesi (*session-based*), bukan per huruf.
+- Halaman **History** dengan fitur pencarian dan filter.
+- Halaman **Detail Terjemahan** lengkap dengan informasi waktu, tanggal, dan opsi putar suara.
+- Dialog **konfirmasi hapus** untuk mencegah penghapusan tidak sengaja.
+- Statistik **Hari Ini** dan **Total Jurnal** di beranda yang terupdate secara reaktif (*real-time*).
 
-Membangun aplikasi mobile berbasis Flutter yang memanfaatkan kamera perangkat untuk:
-1. **Mendeteksi** gestur tangan secara real-time menggunakan model AI (MediaPipe / TFLite)
-2. **Menerjemahkan** isyarat menjadi teks dan suara yang dapat dipahami masyarakat umum
-3. **Mencatat** riwayat terjemahan dalam "Buku Jurnal Terjemahan" yang tersinkronisasi ke cloud
-
----
-
-## ♻️ Inheritance dari Proyek Sebelumnya (Proyek 4)
-
-Sistem ini mewarisi dan mentransformasi komponen dari proyek Logbook sebelumnya:
-
-```
-Proyek 4 (Logbook App)          Proyek 5 (Sign Language Translator)
-─────────────────────────────────────────────────────────────────────
-Hive (database lokal)      →    Menyimpan cache terjemahan & setting
-MongoDB (cloud sync)       →    Sinkronisasi riwayat terjemahan
-Modul Logbook              →    "Buku Jurnal Terjemahan" (History Log)
-                                  └─ Frasa yang diterjemahkan + timestamp
-```
-
-Setiap entri jurnal terjemahan akan menyimpan:
-- Teks hasil terjemahan
-- Waktu kejadian (timestamp)
-- Skor kepercayaan (confidence score) dari model AI
-- Thumbnail frame gestur (opsional)
+### 📷 Manajemen Kamera
+- Dukungan kamera **depan** dan **belakang** dengan transisi mulus tanpa crash.
+- *Lifecycle management* yang aman: stop stream → dispose → re-initialize → restart stream.
+- Indikator loading selama proses perpindahan kamera.
 
 ---
 
-## 🔬 Bagian 2: Deep Dive PCD & ML Pipeline
+## 🛠️ Tech Stack
 
-### 🎨 Target Sensorik
-
-| Sensor | Data | Keterangan |
-|--------|------|------------|
-| Kamera Depan | Frame video real-time | Menangkap gestur tangan pengguna |
-| Hand Landmarks | 21 titik per tangan | Ujung jari, ruas jari, telapak tangan, pergelangan |
-| Pose Estimation | Titik lengan atas | Konteks posisi tangan relatif terhadap tubuh |
-
----
-
-### ⚙️ Alur Pre-Processing PCD (Sebelum Inference)
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     ALUR PCD PIPELINE                        │
-└──────────────────────────────────────────────────────────────┘
-
-  📷 Frame Kamera (YUV420 / BGRA8888)
-          │
-          ▼
-  ┌───────────────────┐
-  │  1. COLOR CONVERSION  │  YUV/BGRA → RGB
-  │                   │  (Model AI dilatih dengan RGB)
-  └────────┬──────────┘
-           │
-           ▼
-  ┌───────────────────┐
-  │  2. CENTER CROP   │  16:9 (HP) → 1:1 (Square)
-  │                   │  Contoh: 1080×1920 → crop tengah 1080×1080
-  │                   │  ⚠️ WAJIB sebelum resize agar tidak distorted
-  └────────┬──────────┘
-           │
-           ▼
-  ┌───────────────────┐
-  │  3. RESIZE        │  1080×1080 → 224×224
-  │                   │  (Sesuai input size model TFLite)
-  └────────┬──────────┘
-           │
-           ▼
-  ┌───────────────────┐
-  │  4. NORMALISASI   │  pixel_value / 255.0
-  │                   │  [0, 255] uint8 → [0.0, 1.0] Float32
-  └────────┬──────────┘
-           │
-           ▼
-  ┌───────────────────┐
-  │  5. INFERENCE     │  TFLite interpreter.run()
-  │                   │  Output: koordinat landmarks + label isyarat
-  └────────┬──────────┘
-           │
-           ▼
-  ┌───────────────────┐
-  │  6. COORD MAPPING │  Koordinat model (224px) → Layar HP (relatif)
-  │                   │  Normalisasi → Perkalian dimensi layar
-  └───────────────────┘
-```
-
-> **Mengapa tidak Grayscale?**  
-> Informasi warna kulit tangan sangat membantu model membedakan tangan dari latar belakang. Konversi ke Grayscale akan menurunkan akurasi deteksi secara signifikan.
-
----
-
-### 🧵 Pemetaan Isolate (Thread Management)
-
-Flutter berjalan secara single-thread. Pemrosesan AI yang berat **harus dipisah** ke background isolate agar UI tetap responsif (target: 60 FPS).
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     THREAD ARCHITECTURE                         │
-├────────────────────────┬────────────────────────────────────────┤
-│   MAIN ISOLATE (UI)    │     BACKGROUND ISOLATE (Worker)        │
-│   ─────────────────    │     ──────────────────────────         │
-│                        │                                        │
-│  • CameraController    │  • Terima CameraImage object           │
-│    (stream frames)     │  • PCD: RGB Conversion                 │
-│  • Tampilkan UI        │  • PCD: Center Crop                    │
-│    (tombol, teks)      │  • PCD: Resize → 224×224               │
-│  • CustomPainter       │  • PCD: Normalisasi → Float32List      │
-│    (skeleton overlay)  │  • TFLite inference                    │
-│  • TTS / Text-to-      │  • Mapping output tensor               │
-│    Speech output       │  • Kirim hasil (teks + koordinat)      │
-│  • Haptic feedback     │    ke Main Isolate via SendPort         │
-│                        │                                        │
-│  compute() ◄───────────────────────────── hasil ringkas         │
-└────────────────────────┴────────────────────────────────────────┘
-```
-
----
-
-### 📐 Pemetaan Koordinat (Model Space → Screen Space)
-
-Model AI menghasilkan koordinat dalam ruang 224×224 px. Koordinat ini harus dipetakan ke dimensi layar aktual HP.
-
-#### Formula Konversi:
-
-```dart
-// Step 1: Normalisasi output model menjadi nilai relatif (0.0 - 1.0)
-double xRelative = landmarkX / modelInputWidth;   // contoh: 112 / 224 = 0.5
-double yRelative = landmarkY / modelInputHeight;
-
-// Step 2: Kalikan dengan dimensi canvas layar
-double xScreen = xRelative * canvasWidth;
-double yScreen = yRelative * canvasHeight;
-
-// Step 3: Mirroring untuk kamera depan (balik sumbu X)
-double xScreenMirrored = canvasWidth - xScreen;
-```
-
-#### Mengapa Mirroring Diperlukan?
-
-```
-Tanpa mirroring:          Dengan mirroring:
-  ✋ (isyarat "A")          ✋ (terlihat natural)
-  Overlay malah terbalik    Overlay sesuai posisi tangan
-  seperti di cermin         di layar
-```
+| Layer | Teknologi | Keterangan |
+|---|---|---|
+| **Mobile Framework** | Flutter 3.10+ / Dart 3.x | UI cross-platform, dijalankan di Android |
+| **Hand Detection** | MediaPipe Hands (via `hand_landmarker`) | Deteksi 21 titik landmark tangan secara real-time |
+| **ML Inference** | ONNX Runtime (`onnxruntime`) | Inferensi model klasifikasi gestur on-device |
+| **Model Training** | Python (scikit-learn, SVM) | Pelatihan model classifier menggunakan Support Vector Machine |
+| **Feature Extraction** | MediaPipe + Custom Pipeline | Ekstraksi 126 fitur landmark (21 titik × 3 koordinat × 2 tangan) |
+| **Model Export** | `skl2onnx` | Konversi model scikit-learn (.pkl) ke format ONNX |
+| **Local Database** | Hive | Penyimpanan jurnal riwayat terjemahan secara lokal |
+| **State Management** | Riverpod | Manajemen state aplikasi Flutter |
+| **Text-to-Speech** | `flutter_tts` + Google TTS Engine | Konversi teks hasil terjemahan menjadi suara |
+| **Navigation** | GoRouter | Deklaratif routing untuk navigasi antar halaman |
 
 ---
 
 ## 🏗️ Arsitektur Sistem
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    FLUTTER APPLICATION                      │
-│                                                             │
-│  ┌──────────────┐   ┌─────────────────┐   ┌─────────────┐ │
-│  │ Camera Layer │   │  AI/ML Layer    │   │  UI Layer   │ │
-│  │              │   │                 │   │             │ │
-│  │ CameraPlugin │──▶│ Background      │──▶│ CustomPaint │ │
-│  │ YUV/BGRA     │   │ Isolate         │   │ (Skeleton)  │ │
-│  │ frame stream │   │ ┌─────────────┐ │   │             │ │
-│  └──────────────┘   │ │ PCD Pipeline│ │   │ TTS Output  │ │
-│                     │ │ TFLite Model│ │   │ Haptic Fbck │ │
-│  ┌──────────────┐   │ └─────────────┘ │   └─────────────┘ │
-│  │  Data Layer  │   └─────────────────┘                   │
-│  │              │                                          │
-│  │ Hive (local) │◀──────── Terjemahan berhasil            │
-│  │ MongoDB      │          disimpan ke jurnal              │
-│  │ (cloud sync) │                                          │
-│  └──────────────┘                                          │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        📱 Flutter App                           │
+│                                                                 │
+│  ┌──────────┐    ┌──────────────┐    ┌───────────────────────┐  │
+│  │  Camera   │───▶│  MediaPipe   │───▶│  Feature Extraction   │  │
+│  │  Stream   │    │  Hand        │    │  (126 Landmark        │  │
+│  │  (30fps)  │    │  Landmarker  │    │   Features per frame) │  │
+│  └──────────┘    └──────────────┘    └───────────┬───────────┘  │
+│                                                   │              │
+│                                      ┌────────────▼────────────┐│
+│                                      │   ONNX Runtime          ││
+│                                      │   (SVM Classifier)      ││
+│                                      │   Gesture → Label A-Z   ││
+│                                      └────────────┬────────────┘│
+│                                                   │              │
+│                    ┌──────────────────────────────┼─────────┐   │
+│                    │           UI Layer            │         │   │
+│                    │                               ▼         │   │
+│                    │  ┌─────────┐ ┌───────┐ ┌──────────┐    │   │
+│                    │  │Skeleton │ │ Label │ │Hold-to-  │    │   │
+│                    │  │Overlay  │ │Display│ │Register  │    │   │
+│                    │  └─────────┘ └───────┘ └──────────┘    │   │
+│                    │                                         │   │
+│                    │  ┌─────────────────────────────────┐    │   │
+│                    │  │  Session Panel                  │    │   │
+│                    │  │  [Phrase Buffer] [⌫] [⎵] [💾]  │    │   │
+│                    │  └─────────────────────────────────┘    │   │
+│                    └─────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌───────────────┐    ┌───────────────┐                         │
+│  │  Hive DB      │    │  Google TTS   │                         │
+│  │  (History)    │    │  (Speech)     │                         │
+│  └───────────────┘    └───────────────┘                         │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│                    🧪 Training Pipeline (Python)                 │
+│                                                                  │
+│  Dataset Gambar ──▶ MediaPipe Extraction ──▶ CSV Landmarks       │
+│                         (extract_mediapipe_landmarks.py)         │
+│                                                                  │
+│  CSV Landmarks ──▶ Train SVM/RF/KNN ──▶ best_model_svm.pkl      │
+│                      (train_classifier.py)                       │
+│                                                                  │
+│  .pkl Model ──▶ skl2onnx ──▶ gesture_model.onnx                 │
+│                   (export_model.py)                               │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📁 Struktur Proyek
+## 📋 Prasyarat (Prerequisites)
 
+Sebelum memulai, pastikan Anda sudah menginstal:
+
+| Prasyarat | Versi Minimum | Keterangan |
+|---|---|---|
+| **Flutter SDK** | 3.10.8+ | [Panduan instalasi Flutter](https://docs.flutter.dev/get-started/install) |
+| **Dart SDK** | 3.x | Terinstal otomatis bersama Flutter |
+| **Android Studio / Android SDK** | API 24+ (Android 7.0) | Untuk build dan emulator |
+| **Perangkat Android Fisik** | Android 7.0+ | **Direkomendasikan** — kamera & TTS tidak berfungsi optimal di emulator |
+| **Python** | 3.10+ | Hanya diperlukan untuk melatih ulang model (opsional) |
+| **Git** | Terbaru | Untuk clone repositori |
+
+### Prasyarat Opsional (Untuk Re-Training Model)
 ```
-PCD_TUBES_COBA/
-├── 📄 README.md                    ← Dokumentasi ini
-├── 📄 PROPOSAL.md                  ← Proposal lengkap proyek
-│
-├── 📂 docs/                        ← Dokumentasi & aset
-│   ├── assets/
-│   │   └── banner.png
-│   ├── diagrams/                   ← Diagram arsitektur & pipeline
-│   └── laporan/                    ← Draft laporan akhir
-│
-├── 📂 research/                    ← Riset & referensi
-│   ├── dataset_notes.md            ← Catatan dataset BISINDO
-│   ├── model_comparison.md         ← Perbandingan model AI
-│   └── references/                 ← Paper & artikel referensi
-│
-├── 📂 experiments/                 ← Eksperimen & prototipe Python
-│   ├── preprocessing/
-│   │   ├── color_conversion.py     ← Uji konversi YUV→RGB
-│   │   ├── center_crop.py          ← Uji center crop
-│   │   └── normalization.py        ← Uji normalisasi piksel
-│   ├── landmark_detection/
-│   │   ├── mediapipe_test.py       ← Uji MediaPipe hand tracking
-│   │   └── coordinate_mapping.py  ← Uji pemetaan koordinat
-│   └── model_inference/
-│       └── tflite_benchmark.py     ← Benchmark kecepatan inference
-│
-└── 📂 app/                         ← Source code Flutter (akan datang)
-    ├── lib/
-    │   ├── core/
-    │   │   ├── isolates/           ← Background isolate logic
-    │   │   └── preprocessing/      ← PCD pipeline
-    │   ├── features/
-    │   │   ├── camera/             ← Kamera & stream
-    │   │   ├── inference/          ← TFLite inference
-    │   │   ├── overlay/            ← CustomPainter skeleton
-    │   │   ├── tts/                ← Text-to-Speech
-    │   │   └── history/            ← Jurnal Terjemahan
-    │   └── data/
-    │       ├── local/              ← Hive database
-    │       └── remote/             ← MongoDB sync
-    └── assets/
-        └── models/                 ← File model .tflite
+pip install mediapipe scikit-learn pandas numpy matplotlib seaborn joblib skl2onnx
 ```
 
 ---
 
-## 🚀 Cara Menjalankan (Development)
+## 🚀 Instalasi & Cara Menjalankan (Getting Started)
 
-### Prasyarat
-
-```bash
-# Flutter SDK (versi 3.x)
-flutter --version
-
-# Python (untuk eksperimen preprocessing)
-python --version  # 3.9+
-
-# Dependencies Python
-pip install mediapipe opencv-python numpy matplotlib tensorflow
-```
-
-### Menjalankan Eksperimen Python
+### 1. Clone Repositori
 
 ```bash
-cd experiments/preprocessing
-python color_conversion.py
-python center_crop.py
-
-cd ../landmark_detection
-python mediapipe_test.py
+git clone https://github.com/ErsyaHasby/PCD_Bahasa_Isyarat.git
+cd PCD_Bahasa_Isyarat
 ```
 
-### Menjalankan Aplikasi Flutter
+### 2. Install Dependencies Flutter
 
 ```bash
 cd app
 flutter pub get
+```
+
+### 3. Hubungkan Perangkat Android
+
+Hubungkan HP Android Anda ke komputer via USB, lalu pastikan perangkat terdeteksi:
+
+```bash
+flutter devices
+```
+
+### 4. Jalankan Aplikasi
+
+```bash
 flutter run
+```
+
+> **Catatan:**
+> - Untuk performa terbaik, gunakan **perangkat Android fisik**.
+> - Pastikan **izin kamera** diberikan saat diminta.
+> - Untuk fitur **Text-to-Speech**, pastikan mesin **Google TTS** terinstal dan paket **Bahasa Indonesia** sudah diunduh di pengaturan HP Anda (Settings → Text-to-Speech → Install voice data).
+
+### 5. (Opsional) Re-Training Model
+
+Jika ingin melatih ulang model dari dataset Anda sendiri:
+
+```bash
+# Dari root direktori proyek
+# 1. Ekstraksi landmark dari gambar dataset
+python experiments/feature_extraction/extract_mediapipe_landmarks.py
+
+# 2. Latih classifier (SVM, Random Forest, KNN)
+python experiments/feature_extraction/train_classifier.py
+
+# 3. Export model terbaik ke format ONNX
+python experiments/feature_extraction/export_model.py
 ```
 
 ---
 
-## 📚 Referensi Teknologi
+## 📁 Struktur Folder (Project Structure)
 
-| Teknologi | Kegunaan | Link |
-|-----------|----------|------|
-| MediaPipe Hands | Deteksi 21 landmark tangan | [mediapipe.dev](https://mediapipe.dev) |
-| TensorFlow Lite | Inference model di mobile | [tensorflow.org/lite](https://www.tensorflow.org/lite) |
-| Flutter | Framework aplikasi mobile | [flutter.dev](https://flutter.dev) |
-| Hive | Database lokal Flutter | [pub.dev/packages/hive](https://pub.dev/packages/hive) |
-| MongoDB Atlas | Cloud database sync | [mongodb.com](https://www.mongodb.com) |
-| BISINDO | Bahasa Isyarat Indonesia | Referensi dataset isyarat |
+```
+PCD_Bahasa_Isyarat/
+├── app/                                 # 📱 Aplikasi Flutter
+│   ├── android/                         # Konfigurasi native Android
+│   ├── assets/
+│   │   ├── models/
+│   │   │   ├── gesture_model.onnx       # Model ONNX (SVM classifier)
+│   │   │   ├── labels.json              # Label huruf A-Z
+│   │   │   └── svm_params.json          # Parameter normalisasi model
+│   │   └── images/                      # Aset gambar aplikasi
+│   ├── lib/
+│   │   ├── core/
+│   │   │   ├── models/                  # Data models (HandData, FeatureSet, dll.)
+│   │   │   ├── router/                  # Konfigurasi GoRouter
+│   │   │   ├── services/
+│   │   │   │   ├── hand_classifier.dart           # Orchestrator deteksi → klasifikasi
+│   │   │   │   ├── hand_feature_extractor.dart    # Ekstraksi 126 fitur landmark
+│   │   │   │   ├── hand_landmark_detector.dart    # Wrapper MediaPipe Hand Landmarker
+│   │   │   │   ├── onnx_classifier_service.dart   # Klasifikasi gestur via ONNX
+│   │   │   │   ├── onnx_inference_service.dart     # Low-level ONNX Runtime bridge
+│   │   │   │   ├── pcd_frame_processor.dart       # Prosesor frame kamera
+│   │   │   │   ├── pcd_pipeline.dart              # Pipeline PCD (preprocessing)
+│   │   │   │   └── tts_service.dart               # Layanan Text-to-Speech
+│   │   │   └── theme/                   # AppTheme (warna, tipografi, gradien)
+│   │   ├── data/
+│   │   │   └── local/
+│   │   │       ├── journal_repository.dart   # CRUD operasi jurnal (Hive)
+│   │   │       └── models/                   # TranslationEntry model
+│   │   ├── features/
+│   │   │   ├── camera/                  # 📷 Layar kamera AI & deteksi
+│   │   │   ├── history/                 # 📒 Riwayat terjemahan
+│   │   │   ├── home/                    # 🏠 Beranda & statistik
+│   │   │   ├── onboarding/              # 👋 Layar onboarding
+│   │   │   └── splash/                  # ⚡ Splash screen
+│   │   └── main.dart                    # Entry point aplikasi
+│   └── pubspec.yaml                     # Dependencies Flutter
+│
+├── experiments/                          # 🧪 Pipeline Training & Eksperimen
+│   ├── feature_extraction/
+│   │   ├── extract_mediapipe_landmarks.py   # Ekstraksi landmark dari gambar
+│   │   ├── train_classifier.py              # Training SVM/RF/KNN
+│   │   ├── export_model.py                  # Konversi .pkl → .onnx
+│   │   ├── dataset_landmarks.csv            # Dataset hasil ekstraksi
+│   │   └── models/
+│   │       ├── best_model_svm.pkl           # Model SVM terbaik (.pkl)
+│   │       ├── label_encoder.pkl            # Label encoder
+│   │       └── confusion_matrix_svm.png     # Visualisasi confusion matrix
+│   ├── benchmark/                       # Benchmark performa
+│   ├── mediapipe/                       # Eksperimen MediaPipe
+│   └── preprocessing/                   # Eksperimen preprocessing
+│
+├── PRD.md                               # Product Requirements Document
+├── PROPOSAL.md                          # Proposal proyek
+├── TASK_BREAKDOWN.md                    # Pembagian tugas tim
+├── GIT_WORKFLOW.md                      # Panduan workflow Git
+└── README.md                            # 📖 Anda sedang membaca ini
+```
+
+---
+
+## 👥 Anggota Tim / Kontributor
+
+<div align="center">
+
+| No | Nama | NIM | Peran |
+|:---:|---|---|---|
+| 1 | **Ersya Hasby** | — | Project Lead / Mobile Developer |
+| 2 | **Anggota 2** | — | ML Engineer / Data Scientist |
+| 3 | **Anggota 3** | — | UI/UX Designer |
+| 4 | **Anggota 4** | — | Quality Assurance |
+
+</div>
+
+> **Catatan:** Silakan perbarui tabel di atas dengan nama lengkap, NIM, dan peran masing-masing anggota tim.
 
 ---
 
 <div align="center">
 
-**Kelompok 2 — PCD 2025/2026**  
-Politeknik Negeri Bandung
+**Kelompok 2 — Pengolahan Citra Digital (PCD) 2025/2026**
 
-*"Menjembatani komunikasi, satu isyarat dalam satu waktu."*
+**Politeknik Negeri Bandung (POLBAN)**
+
+Teknik Informatika
+
+---
+
+<sub>Dibuat dengan ❤️ menggunakan Flutter, MediaPipe, dan ONNX Runtime</sub>
 
 </div>
