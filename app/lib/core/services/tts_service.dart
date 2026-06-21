@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_tts/flutter_tts.dart';
 
 class TtsService {
@@ -8,6 +9,11 @@ class TtsService {
     if (_isInitialized) return;
     
     try {
+      if (Platform.isAndroid) {
+        await _tts.setEngine('com.google.android.tts');
+        print('DEBUG TTS: Set engine to Google TTS');
+      }
+
       await _tts.awaitSpeakCompletion(true);
       
       // Ambil daftar bahasa yang tersedia di sistem
