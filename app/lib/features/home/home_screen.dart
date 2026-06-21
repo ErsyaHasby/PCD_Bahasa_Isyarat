@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/journal_repository.dart';
 
@@ -32,9 +33,6 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final todayCount  = _repo.getTodayEntries().length;
-    final totalCount  = _repo.totalEntries;
-
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppTheme.bgGradient),
@@ -55,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen>
                     const SizedBox(height: 24),
                     _buildHeader(),
                     const SizedBox(height: 32),
-                    _buildStatsRow(todayCount, totalCount),
+                    _buildStatsRow(),
                     const SizedBox(height: 32),
                     _buildStartButton(context),
                     const SizedBox(height: 28),
@@ -122,24 +120,32 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ── Stats Row ────────────────────────────────────────────────────────
-  Widget _buildStatsRow(int todayCount, int totalCount) {
-    return Row(
-      children: [
-        Expanded(child: _StatCard(
-          label: 'Hari ini', value: '$todayCount', icon: '📅',
-          color: AppTheme.primary,
-        )),
-        const SizedBox(width: 12),
-        Expanded(child: _StatCard(
-          label: 'Total jurnal', value: '$totalCount', icon: '📖',
-          color: AppTheme.secondary,
-        )),
-        const SizedBox(width: 12),
-        Expanded(child: _StatCard(
-          label: 'Akurasi', value: ' 95.7%', icon: '🎯',
-          color: AppTheme.success,
-        )),
-      ],
+  Widget _buildStatsRow() {
+    return ValueListenableBuilder(
+      valueListenable: _repo.box.listenable(),
+      builder: (context, box, _) {
+        final todayCount = _repo.getTodayEntries().length;
+        final totalCount = _repo.totalEntries;
+
+        return Row(
+          children: [
+            Expanded(child: _StatCard(
+              label: 'Hari ini', value: '$todayCount', icon: '📅',
+              color: AppTheme.primary,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatCard(
+              label: 'Total jurnal', value: '$totalCount', icon: '📖',
+              color: AppTheme.secondary,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatCard(
+              label: 'Akurasi', value: '95.7%', icon: '🎯',
+              color: AppTheme.success,
+            )),
+          ],
+        );
+      },
     );
   }
 

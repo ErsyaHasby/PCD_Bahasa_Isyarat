@@ -172,60 +172,7 @@ class _TranslationDetailScreenState extends State<TranslationDetailScreen>
                         value: entry.formattedDate,
                         color: AppTheme.primary,
                       ),
-                      const SizedBox(width: 10),
-                      _MetaTile(
-                        icon: Icons.verified_rounded,
-                        label: 'Akurasi',
-                        value: entry.confidencePercent,
-                        color: confColor,
-                      ),
                     ],
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // ── Confidence bar ───────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.card,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppTheme.divider),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Tingkat Kepercayaan AI',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    color: AppTheme.textSecondary,
-                                    fontWeight: FontWeight.w500)),
-                            Text(entry.confidencePercent,
-                                style: TextStyle(
-                                    fontSize: 16,
-                                    color: confColor,
-                                    fontWeight: FontWeight.w700)),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: LinearProgressIndicator(
-                            value: entry.confidenceScore,
-                            backgroundColor: AppTheme.divider,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(confColor),
-                            minHeight: 8,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
 
@@ -254,8 +201,29 @@ class _TranslationDetailScreenState extends State<TranslationDetailScreen>
                         width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: () async {
-                            await _repo.deleteEntry(entry.id);
-                            if (context.mounted) context.go('/history');
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                backgroundColor: AppTheme.surface,
+                                title: const Text('Hapus Jurnal?', style: TextStyle(color: AppTheme.textPrimary)),
+                                content: const Text('Apakah Anda yakin ingin menghapus sesi jurnal ini?', style: TextStyle(color: AppTheme.textSecondary)),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('Batal', style: TextStyle(color: AppTheme.textHint)),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    child: const Text('Hapus', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                            );
+
+                            if (confirm == true) {
+                              await _repo.deleteEntry(entry.id);
+                              if (context.mounted) context.go('/history');
+                            }
                           },
                           icon: const Icon(Icons.delete_outline_rounded,
                               color: AppTheme.error),
