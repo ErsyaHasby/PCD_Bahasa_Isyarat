@@ -32,6 +32,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
           .toList();
 
   Future<void> _deleteEntry(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Hapus Jurnal?', style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text('Apakah Anda yakin ingin menghapus sesi jurnal ini?', style: TextStyle(color: AppTheme.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal', style: TextStyle(color: AppTheme.textHint)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     await _repo.deleteEntry(id);
     _loadEntries();
     if (mounted) {

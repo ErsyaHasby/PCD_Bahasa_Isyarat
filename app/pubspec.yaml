@@ -1,6 +1,6 @@
 name: isyarat_translator
 description: "Sistem Intelijen Visual Penerjemah Bahasa Isyarat Real-Time — Kelompok 2 PCD 2025/2026"
-publish_to: 'none'
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
@@ -16,10 +16,16 @@ dependencies:
   go_router: ^14.8.1
 
   # Camera
-  camera: ^0.10.5
+  camera: ^0.11.3
+
+  # MediaPipe Hand Landmark Detection (JNI-based, Android only)
+  hand_landmarker: ^2.2.0
 
   # TFLite Inference
   tflite_flutter: ^0.11.0
+
+  # ONNX Runtime Inference
+  onnxruntime: ^1.0.0
 
   # Text to Speech
   flutter_tts: ^4.2.5
