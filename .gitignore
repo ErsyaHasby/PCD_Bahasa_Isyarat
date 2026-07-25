@@ -81,3 +81,7 @@ experiments/feature_extraction/models/
 
 # Flutter auto-generated
 app/linux/flutter/generated_plugins.cmake
+
+# Ignore dataset file besar
+app/assets/bisindo/
+

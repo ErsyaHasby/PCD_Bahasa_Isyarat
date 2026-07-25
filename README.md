@@ -200,9 +200,16 @@ flutter run
 > - Pastikan **izin kamera** diberikan saat diminta.
 > - Untuk fitur **Text-to-Speech**, pastikan mesin **Google TTS** terinstal dan paket **Bahasa Indonesia** sudah diunduh di pengaturan HP Anda (Settings → Text-to-Speech → Install voice data).
 
-### 5. (Opsional) Re-Training Model
+### 5. (Opsional) Persiapan Dataset & Re-Training Model
 
-Jika ingin melatih ulang model dari dataset Anda sendiri:
+Jika ingin melatih ulang model, Anda perlu menyiapkan datasetnya terlebih dahulu:
+
+1. **Download Dataset**: Unduh dataset BISINDO dari [Kaggle - Indonesian Sign Language (BISINDO)](https://www.kaggle.com/datasets/agungmrf/indonesian-sign-language-bisindo).
+2. **Ekstrak Dataset**: Ekstrak file dataset yang sudah diunduh ke dalam folder `app/assets`. 
+
+> **Catatan:** Folder dataset ini sudah otomatis diabaikan (di-ignore) oleh `.gitignore` sehingga tidak akan membebani repository saat Anda melakukan *push* ke GitHub.
+
+Setelah dataset siap di `app/assets`, Anda bisa melatih ulang model dengan perintah berikut:
 
 ```bash
 # Dari root direktori proyek
